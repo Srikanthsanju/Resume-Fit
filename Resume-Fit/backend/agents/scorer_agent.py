@@ -95,6 +95,34 @@ class ScorerAgent:
         evidence = self._build_evidence_map(structured_resume, jd_signals)
         heuristic = self._heuristic_analysis(job_description, structured_resume, jd_signals, evidence, job_type)
 
+        json_schema = '''
+{
+  "score": 0,
+  "passed": false,
+  "ats_confidence": "low|medium|high",
+  "recruiter_confidence": "low|medium|high",
+  "breakdown": {
+    "must_have_evidence": {"score": 0, "max": 25, "details": ""},
+    "experience_alignment": {"score": 0, "max": 20, "details": ""},
+    "wording_realism": {"score": 0, "max": 15, "details": ""},
+    "skills_credibility": {"score": 0, "max": 15, "details": ""},
+    "domain_coherence": {"score": 0, "max": 10, "details": ""},
+    "impact_specificity": {"score": 0, "max": 10, "details": ""},
+    "format_clarity": {"score": 0, "max": 5, "details": ""}
+  },
+  "evidence_strength": {
+    "strong": [],
+    "medium": [],
+    "weak_or_missing": []
+  },
+  "forced_or_generic_signals": [],
+  "skill_gaps": [],
+  "wording_gaps": [],
+  "top_fixes": [],
+  "strengths": []
+}
+'''
+
         system_prompt = f"""
 You are a STRICT ATS and recruiter-quality resume evaluator.
 
@@ -124,31 +152,7 @@ Important scoring rules:
 - Distinguish ATS score from recruiter confidence. A resume can match keywords and still have weak credibility.
 
 Return ONLY valid JSON in this schema:
-{
-  "score": 0,
-  "passed": false,
-  "ats_confidence": "low|medium|high",
-  "recruiter_confidence": "low|medium|high",
-  "breakdown": {
-    "must_have_evidence": {"score": 0, "max": 25, "details": ""},
-    "experience_alignment": {"score": 0, "max": 20, "details": ""},
-    "wording_realism": {"score": 0, "max": 15, "details": ""},
-    "skills_credibility": {"score": 0, "max": 15, "details": ""},
-    "domain_coherence": {"score": 0, "max": 10, "details": ""},
-    "impact_specificity": {"score": 0, "max": 10, "details": ""},
-    "format_clarity": {"score": 0, "max": 5, "details": ""}
-  },
-  "evidence_strength": {
-    "strong": [],
-    "medium": [],
-    "weak_or_missing": []
-  },
-  "forced_or_generic_signals": [],
-  "skill_gaps": [],
-  "wording_gaps": [],
-  "top_fixes": [],
-  "strengths": []
-}
+{json_schema}
 """
 
         user_prompt = f"""
@@ -240,7 +244,7 @@ Return only JSON.
             summary = resume_content["summary"]
             if isinstance(summary, list):
                 for bullet in summary:
-                    sections.append(f"• {bullet}")
+                    sections.append(f"* {bullet}")
             else:
                 sections.append(str(summary))
         if "skills" in resume_content:
@@ -263,7 +267,7 @@ Return only JSON.
                 items = resume_content[key]
                 if isinstance(items, list):
                     for bullet in items:
-                        sections.append(f"• {bullet}")
+                        sections.append(f"* {bullet}")
                 else:
                     sections.append(str(items))
         return "\n".join(sections)
@@ -301,7 +305,7 @@ Return only JSON.
         return {"must_have": must_have, "nice_to_have": nice_to_have, "explicit_tech": explicit_tech, "raw": job_description}
 
     def _extract_section_bullets(self, text: str, section_names: List[str]) -> List[str]:
-        lines = [line.strip("•*- \t") for line in text.splitlines() if line.strip()]
+        lines = [line.strip("*- \t") for line in text.splitlines() if line.strip()]
         collected = []
         capture = False
         for line in lines:
