@@ -63,11 +63,26 @@ Return ONLY a JSON array of ownership areas. Example:
 
     def generate_resume(self, job_description: str, feedback: str = None, role_type: str = "AI Engineer", job_type: str = "Fulltime") -> dict:
         ownership_areas = self.identify_ownership_areas(job_description)
+        ownership_json = json.dumps(ownership_areas)
+        
         date_rules = {
             "Fulltime": {"experience_years": "5+ years", "cognizant_dates": "Jun 2020 - Oct 2021", "amrita_dates": "Jun 2016 - May 2020"},
             "Contract": {"experience_years": "7+ years", "cognizant_dates": "Jun 2018 - Oct 2021", "amrita_dates": "Jun 2014 - May 2018"},
         }
         active_dates = date_rules["Contract" if job_type.lower() == "contract" else "Fulltime"]
+
+        json_format = '''
+{
+    "summary": ["bullet 1", "bullet 2", ...],
+    "skills": {
+        "Programming": "Python 3.11+, ..."
+    },
+    "bee_data": ["bullet 1", "bullet 2", ...],
+    "allied_health": ["bullet 1", "bullet 2", ...],
+    "byjus": ["bullet 1", "bullet 2", ...],
+    "cognizant": ["bullet 1", "bullet 2", ...]
+}
+'''
 
         system_prompt = f"""You are an expert resume writer specializing in tech resumes for AI and ML roles.
 
@@ -83,7 +98,7 @@ Generate tailored resume content for a job application. You must follow ALL the 
 ## ADDITIONAL CONTEXT
 - Target Role Type: {role_type}
 - Job Type: {job_type}
-- Ownership Areas from JD: {json.dumps(ownership_areas)}
+- Ownership Areas from JD: {ownership_json}
 - Use this experience positioning: {active_dates['experience_years']}
 - Use these exact date rules when producing role or education metadata elsewhere in the system:
   - Cognizant: {active_dates['cognizant_dates']}
@@ -107,16 +122,7 @@ Generate tailored resume content for a job application. You must follow ALL the 
 
 ## OUTPUT FORMAT
 Return a JSON object with these exact keys:
-{{
-    "summary": ["bullet 1", "bullet 2", ...],
-    "skills": {
-        "Programming": "Python 3.11+, ..."
-    },
-    "bee_data": ["bullet 1", "bullet 2", ...],
-    "allied_health": ["bullet 1", "bullet 2", ...],
-    "byjus": ["bullet 1", "bullet 2", ...],
-    "cognizant": ["bullet 1", "bullet 2", ...]
-}}
+{json_format}
 
 ## CRITICAL RULES
 1. Follow the length distribution for each section based on job type
@@ -145,6 +151,7 @@ Address these points carefully:
 
 """
         user_prompt += """Generate the tailored resume content. Return ONLY valid JSON, no markdown."""
+        
         response = self.client.messages.create(model=self.model, max_tokens=8000, messages=[{"role": "user", "content": user_prompt}], system=system_prompt)
         text = response.content[0].text.strip()
         try:
