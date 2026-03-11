@@ -1,13 +1,13 @@
 # Resume Writing Guidelines & Strategy Rules
 
-This rulebook is not just about formatting bullets. It is about making the resume sound like a real, senior, high-value engineer whose work reflects ownership, judgment, and technical depth without sounding stuffed, forced, or AI-generated.
+This rulebook is not just about formatting bullets. It is about making the resume sound like a real, senior, high-value engineer whose work reflects ownership, judgment, and technical depth without sounding stuffed, forced, inflated, or AI-generated.
 
 The model must optimize for all 3 goals together:
 1. ATS match
 2. Senior-level credibility
 3. Natural human sounding writing
 
-If a rule improves ATS but makes the resume sound fake, forced, or inflated, do not follow it blindly. Always preserve realism and role-fit.
+If a rule improves ATS but makes the resume sound fake, forced, inflated, or too perfectly matched to the JD, do not follow it blindly. Preserve realism first and then optimize ATS within that boundary.
 
 ---
 
@@ -23,21 +23,21 @@ Bullet lengths should vary naturally. If every bullet has the same length, the r
 
 ## 2. LENGTH DISTRIBUTION BY JOB TYPE
 
-The resume should vary its depth based on job type, not years.
+The resume should vary its depth based on job type, not only years.
 
 ### Fulltime Roles
-Use a balanced structure with moderate technical depth and natural readability.
+Use a balanced structure with moderate technical depth, strong readability, and tighter realism.
 
 | Section | Bullets | Long | Medium | Short |
 |--------|--------|------|--------|-------|
-| Summary | 8 | 30% | 70% | 0% |
+| Summary | 8 | 25% | 75% | 0% |
 | Bee Data | 12 | 20% | 70% | 10% |
 | Allied Health | 10 | 20% | 70% | 10% |
 | BYJU'S | 9 | 20% | 60% | 20% |
 | Cognizant | 7 to 8 | 20% | 50% | 30% |
 
 ### Contract Roles
-Use broader and deeper technical framing. Contract roles should sound more implementation-heavy, system-facing, and technically explicit.
+Use broader and deeper technical framing. Contract resumes can be more implementation-heavy, more system-facing, more explicit, and can carry more direct JD mirroring when it still reads naturally.
 
 | Section | Bullets | Long | Medium | Short |
 |--------|--------|------|--------|-------|
@@ -48,8 +48,8 @@ Use broader and deeper technical framing. Contract roles should sound more imple
 | Cognizant | 10 | 20% | 50% | 30% |
 
 Intent:
-Fulltime resumes should feel stable, mature, and role-shaped.  
-Contract resumes can show more breadth, deeper implementation detail, and wider ownership because contract work is often judged by delivery depth and technical specificity.
+Fulltime resumes should feel stable, mature, role-shaped, and selective.  
+Contract resumes can show more breadth, deeper implementation detail, and slightly more aggressive keyword coverage because contract screening is often more delivery-heavy and checklist-driven.
 
 ---
 
@@ -61,11 +61,10 @@ Experience bullets must not all follow the same structure.
 Use this mix:
 - 50% of experience bullets: problem or ownership + tool or system + result
 - 30% of experience bullets: action + tool or system
-- 20% of experience bullets: leadership, collaboration, architecture, review, mentoring, or process ownership
+- 20% of experience bullets: leadership, collaboration, architecture, review, mentoring, process ownership, or design judgment
 
 Intent:
-A resume where every bullet is written in the same formula sounds generated. Variety creates realism.  
-The preferred structure is important, but it should only shape about half the bullets, not all of them.
+A resume where every bullet is written in the same formula sounds generated. Variety creates realism.
 
 ### Buffing Limits
 At most 1 heavily buffed bullet per section.
@@ -96,23 +95,25 @@ Natural readability matters more than sounding overly literary.
 ### Fulltime Roles
 - 60% of bullets should show partial technical depth
 - 40% can stay at system, architecture, or business-impact level
-- Focus on tools, systems, purpose, and decision-making
-- Avoid ground-level theory unless the JD strongly demands it
+- Focus on tools, systems, purpose, ownership, and decision-making
+- Avoid forcing low-level theory or every replaceable JD skill
+- It is acceptable to mention some replaceable or adjacent skills only in the Skills section without proving every one in work bullets
 
 ### Contract Roles
 - 70% of bullets should show deeper technical depth
 - 30% can stay high-level
 - More implementation detail is allowed
-- More explicit system logic, architecture tradeoffs, data flow, evaluation logic, and technical rationale are allowed
+- More explicit system logic, architecture tradeoffs, data flow, evaluation logic, training logic, and technical rationale are allowed
+- It is acceptable to mirror more JD wording and mention more direct checklist items when still believable
 
 ### Ground-Level Details Rule
 Mention ground-level details such as:
 - t-test
 - chi-square
 - loss functions
+- optimizer details
 - statistical tests
-- training-level model mechanics
-- optimizer-level details
+- training-level mechanics
 
 Only in Contract resumes, or when the JD explicitly demands that level of detail.
 
@@ -125,8 +126,7 @@ Contract resumes can go lower into system mechanics. Fulltime resumes should usu
 
 ## 5. ROLE-SPECIFIC FOCUS
 
-These are directional ownership areas, not a checklist to force into every resume.  
-Read the JD first and choose what is most aligned.
+These are directional ownership areas, not a checklist to force into every resume. Read the JD first and choose what is most aligned.
 
 ### Data Scientist
 Focus on:
@@ -163,8 +163,7 @@ Focus on:
 - reliability
 
 Intent:
-The same background can be framed differently depending on target role.  
-Do not rewrite history. Reframe emphasis.
+The same background can be framed differently depending on target role. Do not rewrite history. Reframe emphasis.
 
 ---
 
@@ -178,8 +177,7 @@ Examples:
 - Software Engineer version should emphasize services, APIs, scaling, infra, reliability, and production architecture
 
 Intent:
-Same project, different angle.  
-Do not make every project sound identical across roles.
+Same project, different angle. Do not make every project sound identical across roles.
 
 ---
 
@@ -219,6 +217,7 @@ When mentioning AI work, prefer:
 - retrieval logic
 - inference flow
 - monitoring
+- model optimization if supported
 
 Avoid vague phrases like:
 - worked on GenAI
@@ -248,9 +247,26 @@ Never write things like:
 
 Metrics belong in Experience bullets where there is context.
 
+### Summary Balance Rule
+For most roles, especially Fulltime:
+- around 60% of the summary should reflect the target role and core JD language
+- around 40% should reflect core concepts, systems, production actions, or business-operational context
+
+The summary should not read like a pasted job title or a compressed JD. It should feel like a human description of the candidate's professional identity.
+
+### Avoid in Summary
+Do not mention:
+- national security
+- defense domain
+- clearance
+- public trust
+- fedramp
+- regulated domain labels
+unless the candidate has clearly extensive and real experience in that exact environment.
+
 Intent:
 A quantified Summary sounds forced, salesy, and unprofessional.  
-The Summary should establish profile quality, not try to prove impact with numbers.
+A defense or clearance flavored Summary sounds especially forced unless extensively proven.
 
 ---
 
@@ -307,8 +323,20 @@ Only include domain context when it helps clarify:
 - why it mattered
 - how it connected to operations
 
+### Defense and Security Rule
+Defense or national-security wording is ordinary domain context only when truly supported by real work history. Do not add such positioning just because the JD is in that space.
+
+Clearance-related wording must never be invented. Avoid phrases like:
+- security clearance eligible
+- maintaining clearance eligibility
+- national security aligned
+
+unless they are explicitly true and strategically helpful.
+
+If a JD requires clearance and the candidate does not have it, do not force workaround wording in the summary. At most, mention regulated, compliance-heavy, or secure environments only when grounded.
+
 Intent:
-Business context should support realism, not make the resume sound repetitive or overexplained.
+Business context should support realism, not make the resume sound repetitive, exaggerated, or overexplained.
 
 ---
 
@@ -358,8 +386,7 @@ Metrics strengthen credibility only when they fit naturally.
 
 Before writing any bullets, identify 5 to 7 Core Technical Ownership Areas from the JD.
 
-These are not tools.  
-These are the real decisions and responsibilities the role owns end to end.
+These are not tools. These are the real decisions and responsibilities the role owns end to end.
 
 Examples:
 - inference platform design
@@ -379,8 +406,7 @@ Does this bullet show a responsibility owned, a decision made, or a system shape
 or does it only mention a tool?
 
 Intent:
-This step must happen before writing bullets, not after.  
-It is the backbone of role-fit and seniority.
+This step must happen before writing bullets, not after. It is the backbone of role-fit and seniority.
 
 ---
 
@@ -403,6 +429,21 @@ Placement priority:
 2. First 3 bullets of latest role
 3. Relevant bullets in older roles
 4. Projects if needed
+
+### Fulltime Keyword Rule
+For Fulltime resumes:
+- do not force every replaceable or optional skill into experience bullets
+- it is acceptable to cover some replaceable skills only in Skills
+- if a requirement has a natural substitute in the profile, prefer the strongest one rather than forcing both
+
+Example:
+If JD says Python and Java, and Python is clearly stronger and more relevant, do not force Java deeply into bullets just for coverage.
+
+### Contract Keyword Rule
+For Contract resumes:
+- ATS coverage can be more aggressive
+- more JD phrases can be mirrored directly
+- more explicit mention of optional or adjacent tools is acceptable if still believable
 
 Intent:
 Important ATS keywords have more value when they appear in the most visible sections, not buried late in the resume.
@@ -468,6 +509,18 @@ Prefer one primary framework and mention another only if justified
 ### Databases
 Mention only the few that realistically fit the role and work history
 
+### Replaceable Skills Rule
+Not every skill needs to be deeply demonstrated in work bullets.
+It is acceptable to:
+- mention some tools only in Skills
+- emphasize only the naturally strongest or most relevant substitutes in experience
+- avoid forcing weak or secondary tools into bullets just for checkbox coverage
+
+Examples:
+- Python can naturally carry the programming emphasis without forcing Java
+- LangChain can carry the agentic workflow emphasis without forcing CrewAI everywhere
+- key model optimization work such as LoRA or QLoRA can be enough without forcing every adjacent optimization concept
+
 Intent:
 The resume must sound like a real engineer with practical tool depth, not a checklist.
 
@@ -532,7 +585,26 @@ Skill categories should sound like real technical domains, not generic resume fi
 
 ---
 
-## 23. FORBIDDEN ELEMENTS
+## 23. DATES AND TENURE RULE
+
+The writer must switch dates based on job type.
+
+### Fulltime
+- Cognizant: Jun 2020 - Oct 2021
+- Amrita University: Jun 2016 - May 2020
+- Overall positioning should align to 5+ years
+
+### Contract
+- Cognizant: Jun 2018 - Oct 2021
+- Amrita University: Jun 2014 - May 2018
+- Overall positioning can align to 7+ years
+
+Intent:
+Do not mix Fulltime and Contract date systems. The resume must be internally consistent.
+
+---
+
+## 24. FORBIDDEN ELEMENTS
 
 Never use:
 - arrows
@@ -553,7 +625,7 @@ Formatting should stay ATS-safe and visually professional.
 
 ---
 
-## 24. STYLE BENCHMARK RULE
+## 25. STYLE BENCHMARK RULE
 
 Use the DA ML style resume as a benchmark for:
 - line density
@@ -570,7 +642,7 @@ The target is not only keyword match. It is also strong professional texture.
 
 ---
 
-## 25. FINAL REALISM TEST
+## 26. FINAL REALISM TEST
 
 Before finalizing the resume, check:
 
@@ -580,6 +652,9 @@ Before finalizing the resume, check:
 4. Are metrics placed naturally inside Experience, not Summary  
 5. Does the resume reflect the target role without forcing every tool from the JD  
 6. Do the skill categories sound senior and technically credible  
-7. Would a hiring manager believe this person actually did the work described
+7. Would a hiring manager believe this person actually did the work described  
+8. Does the summary avoid forced domain branding such as defense or national security  
+9. For Fulltime, are replaceable or optional JD skills handled selectively and naturally  
+10. For Contract, is broader keyword coverage still believable and not overloaded
 
 If any answer is no, revise before finalizing.
