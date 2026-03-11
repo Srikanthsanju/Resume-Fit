@@ -107,7 +107,7 @@ Generate tailored resume content for a job application. You must follow ALL the 
 
 ## OUTPUT FORMAT
 Return a JSON object with these exact keys:
-{
+{{
     "summary": ["bullet 1", "bullet 2", ...],
     "skills": {
         "Programming": "Python 3.11+, ..."
@@ -116,7 +116,7 @@ Return a JSON object with these exact keys:
     "allied_health": ["bullet 1", "bullet 2", ...],
     "byjus": ["bullet 1", "bullet 2", ...],
     "cognizant": ["bullet 1", "bullet 2", ...]
-}
+}}
 
 ## CRITICAL RULES
 1. Follow the length distribution for each section based on job type
