@@ -1,12 +1,13 @@
 """
 Strict ATS + Resume Realism Scorer
 
-This version:
-1. Scores evidence, not just keywords.
+Key upgrades in this version:
+1. Scores evidence, not just keyword presence.
 2. Treats Fulltime and Contract differently.
-3. Allows granular skills to live in Skills without forcing every one into bullets.
+3. Allows granular tools to remain in Skills without forcing every one into bullets.
 4. Penalizes fake-sounding wording, inflated scope, and overloaded bullets.
-5. Is lighter for Contract resumes where broader keyword mirroring is acceptable.
+5. Produces writer-ready feedback with concrete rewrite suggestions and examples.
+6. Gives lighter ATS treatment for Contract and stricter realism treatment for Fulltime.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import os
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Any
 
 from openai import OpenAI
 
@@ -42,6 +43,9 @@ class ScorerAgent:
             "best-in-class",
             "delivering business value",
             "robust solutions",
+            "hands-on experience",
+            "strong experience",
+            "expertise in",
         ]
 
         self.core_capability_terms = {
@@ -49,13 +53,18 @@ class ScorerAgent:
             "experiment tracking", "hyperparameter tuning", "batch inference", "managed endpoints",
             "docker", "kubernetes", "mlops", "ci/cd", "monitoring", "retraining",
             "feature engineering", "pytorch", "tensorflow", "scikit-learn", "xgboost",
-            "openai", "llm", "rag", "langchain", "langgraph", "crewai", "pydantic", "java"
+            "openai", "llm", "rag", "langchain", "langgraph", "crewai", "pydantic", "java",
+            "computer vision", "recommender systems", "documentation", "agile"
         }
 
         self.granular_skill_terms = {
             "glue", "ecr", "iam", "vpc", "athena", "redshift", "lambda", "emr",
             "cloudwatch", "bedrock", "fastapi", "llamaindex", "redis", "postgresql",
             "snowflake", "bigquery", "encryption", "access controls", "step functions"
+        }
+
+        self.replaceable_terms = {
+            "java", "crewai", "pydantic", "tensorflow", "computer vision", "recommender systems"
         }
 
         self.weak_claim_patterns = [
@@ -67,7 +76,6 @@ class ScorerAgent:
             r"\bvarious\b",
             r"\bmultiple\b",
             r"\bseveral\b",
-            r"\busing [A-Za-z0-9 ,/\-]+ for [A-Za-z0-9 ,/\-]+ for\b",
             r"\bdesign and implement\b",
             r"\bbuild and deploy\b",
             r"\bdevelop and maintain\b",
@@ -85,7 +93,8 @@ class ScorerAgent:
             "resume", "job listing", "policy document", "call transcript", "feature table",
             "training dataset", "inference endpoint", "model artifact", "prediction payload",
             "embedding", "vector index", "warehouse table", "batch job", "api request",
-            "customer profile", "recommendation feed", "image dataset", "document corpus"
+            "customer profile", "recommendation feed", "image dataset", "document corpus",
+            "sales record", "support ticket", "document archive", "call log"
         ]
 
     def score_resume(self, job_description: str, resume_content: dict, job_type: str = "Fulltime") -> dict:
@@ -95,64 +104,55 @@ class ScorerAgent:
         evidence = self._build_evidence_map(structured_resume, jd_signals)
         heuristic = self._heuristic_analysis(job_description, structured_resume, jd_signals, evidence, job_type)
 
-        json_schema = '''
-{
-  "score": 0,
-  "passed": false,
-  "ats_confidence": "low|medium|high",
-  "recruiter_confidence": "low|medium|high",
-  "breakdown": {
-    "must_have_evidence": {"score": 0, "max": 25, "details": ""},
-    "experience_alignment": {"score": 0, "max": 20, "details": ""},
-    "wording_realism": {"score": 0, "max": 15, "details": ""},
-    "skills_credibility": {"score": 0, "max": 15, "details": ""},
-    "domain_coherence": {"score": 0, "max": 10, "details": ""},
-    "impact_specificity": {"score": 0, "max": 10, "details": ""},
-    "format_clarity": {"score": 0, "max": 5, "details": ""}
-  },
-  "evidence_strength": {
-    "strong": [],
-    "medium": [],
-    "weak_or_missing": []
-  },
-  "forced_or_generic_signals": [],
-  "skill_gaps": [],
-  "wording_gaps": [],
-  "top_fixes": [],
-  "strengths": []
-}
-'''
+        json_schema = {
+            "score": 0,
+            "passed": False,
+            "ats_confidence": "low|medium|high",
+            "recruiter_confidence": "low|medium|high",
+            "breakdown": {
+                "must_have_evidence": {"score": 0, "max": 25, "details": ""},
+                "experience_alignment": {"score": 0, "max": 20, "details": ""},
+                "wording_realism": {"score": 0, "max": 15, "details": ""},
+                "skills_credibility": {"score": 0, "max": 15, "details": ""},
+                "domain_coherence": {"score": 0, "max": 10, "details": ""},
+                "impact_specificity": {"score": 0, "max": 10, "details": ""},
+                "format_clarity": {"score": 0, "max": 5, "details": ""}
+            },
+            "evidence_strength": {"strong": [], "medium": [], "weak_or_missing": []},
+            "forced_or_generic_signals": [],
+            "skill_gaps": [],
+            "wording_gaps": [],
+            "top_fixes": [],
+            "strengths": [],
+            "writer_feedback": {
+                "core_ownership_areas": [],
+                "skills_to_emphasize": [],
+                "skills_ok_in_skills_only": [],
+                "bad_patterns_to_avoid": [],
+                "rewrite_examples": [],
+                "summary_guidance": ""
+            }
+        }
 
         system_prompt = f"""
-You are a STRICT ATS and recruiter-quality resume evaluator.
+You are a strict ATS and recruiter-quality resume evaluator.
 
-Job type is: {job_type}
+Job type: {job_type}
 
-You do NOT reward resumes merely for listing keywords in summary or skills.
-You care about:
-1. evidence inside work experience
-2. realistic wording
-3. believable tool usage
-4. domain consistency
-5. whether bullets show actual work, not keyword stuffing
-
-Important scoring rules:
+Scoring principles:
 - Core capabilities get full credit only when supported by believable work bullets.
 - Summary and skills sections alone are weaker evidence than work experience.
 - Granular tools can appear only in the Skills section without a heavy penalty.
-- Do NOT punish the resume for omitting every granular tool from bullets if the core workflow is clearly evidenced.
 - For Fulltime resumes, be stricter on realism, selective emphasis, and forced JD mirroring.
-- For Contract resumes, allow broader keyword mirroring and slightly lighter realism penalties if the content is still believable.
-- Replaceable skills do not always need equal emphasis. If Python is strongly evidenced, do not over-penalize weaker Java emphasis unless Java is unmistakably central to the JD.
+- For Contract resumes, allow broader keyword mirroring and slightly lighter realism penalties if still believable.
+- Replaceable skills do not need equal emphasis.
+- If Python is strongly evidenced, do not over-penalize lighter Java emphasis unless Java is central to the JD.
 - Do not over-penalize optional or replaceable skills that appear in Skills but are not heavily emphasized in bullets.
-- Generic wording, buzzword stacking, and vague claims must reduce score.
-- Penalize forced tool insertion if the bullet does not explain what the tool did.
-- Prefer bullets that show a real workflow: source/data/object, action, system/tool, and operational outcome.
-- Penalize bullets that sound templated, stacked, or vague even if they include the right tools.
-- Distinguish ATS score from recruiter confidence. A resume can match keywords and still have weak credibility.
+- Penalize generic wording, vague claims, and overloaded bullets.
+- Prefer bullets that show a real workflow: object or data, action, system, and outcome.
 
-Return ONLY valid JSON in this schema:
-{json_schema}
+Return ONLY valid JSON matching this shape:
+{json.dumps(json_schema, indent=2)}
 """
 
         user_prompt = f"""
@@ -162,13 +162,16 @@ JOB DESCRIPTION
 RESUME TEXT
 {resume_text}
 
-HEURISTIC ANALYSIS FROM PRE-CHECKS
+HEURISTIC ANALYSIS
 {json.dumps(heuristic, indent=2)}
 
-Evaluate the resume strictly but fairly.
+Evaluate strictly but fairly.
 If must-haves appear mostly in summary or skills but not in experience, lower the score.
 For Fulltime resumes, be harder on forced or inflated wording.
 For Contract resumes, be lighter on broader keyword coverage if the bullets still sound believable.
+
+Important:
+In writer_feedback, give concrete guidance and example rewrites that a resume generator can directly use.
 Return only JSON.
 """
 
@@ -178,8 +181,8 @@ Return only JSON.
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            max_tokens=3200,
-            temperature=0.2,
+            max_tokens=3500,
+            temperature=0.15,
         )
 
         content = response.choices[0].message.content or ""
@@ -202,40 +205,20 @@ Return only JSON.
                 "skill_gaps": [],
                 "wording_gaps": ["Scorer response parse failure"],
                 "top_fixes": ["Retry scorer request"],
-                "strengths": []
+                "strengths": [],
+                "writer_feedback": {
+                    "core_ownership_areas": [],
+                    "skills_to_emphasize": [],
+                    "skills_ok_in_skills_only": [],
+                    "bad_patterns_to_avoid": [],
+                    "rewrite_examples": [],
+                    "summary_guidance": ""
+                }
             }
 
-        return self._apply_post_score_adjustments(result, heuristic, job_type)
-
-    def get_improvement_summary(self, score_result: dict) -> str:
-        parts = []
-        parts.append(f"STRICT ATS SCORE: {score_result.get('score', 0)}/100")
-        parts.append(f"ATS CONFIDENCE: {score_result.get('ats_confidence', 'unknown')}")
-        parts.append(f"RECRUITER CONFIDENCE: {score_result.get('recruiter_confidence', 'unknown')}")
-        breakdown = score_result.get("breakdown", {})
-        if breakdown:
-            parts.append("BREAKDOWN:")
-            for key, val in breakdown.items():
-                if isinstance(val, dict):
-                    parts.append(f"  - {key}: {val.get('score', 0)}/{val.get('max', 0)} | {val.get('details', '')}")
-        for key_name, title in [
-            ("forced_or_generic_signals", "GENERIC / FORCED SIGNALS"),
-            ("skill_gaps", "SKILL GAPS"),
-            ("wording_gaps", "WORDING GAPS"),
-        ]:
-            if score_result.get(key_name):
-                parts.append(title + ":")
-                for item in score_result[key_name][:7]:
-                    parts.append(f"  - {item}")
-        if score_result.get("top_fixes"):
-            parts.append("TOP FIXES:")
-            for i, item in enumerate(score_result["top_fixes"][:8], 1):
-                parts.append(f"  {i}. {item}")
-        if score_result.get("strengths"):
-            parts.append("STRENGTHS:")
-            for item in score_result["strengths"][:5]:
-                parts.append(f"  - {item}")
-        return "\n".join(parts)
+        result = self._apply_post_score_adjustments(result, heuristic, jd_signals, job_type)
+        result["writer_feedback"] = self._build_writer_feedback(result, heuristic, jd_signals, job_type)
+        return result
 
     def _format_resume_for_review(self, resume_content: dict) -> str:
         sections: List[str] = []
@@ -247,6 +230,7 @@ Return only JSON.
                     sections.append(f"* {bullet}")
             else:
                 sections.append(str(summary))
+
         if "skills" in resume_content:
             sections.append("\n## TECHNICAL SKILLS")
             skills = resume_content["skills"]
@@ -255,6 +239,7 @@ Return only JSON.
                     sections.append(f"{category}: {values}")
             else:
                 sections.append(str(skills))
+
         experience_mapping = {
             "bee_data": "## BEE DATA TECHNOLOGIES",
             "allied_health": "## ALLIED HEALTH AGENCY",
@@ -291,6 +276,7 @@ Return only JSON.
         jd_lower = job_description.lower()
         must_have = self._extract_section_bullets(job_description, ["must have", "you have", "requirements", "required"])
         nice_to_have = self._extract_section_bullets(job_description, ["nice if you have", "preferred", "plus", "good to have"])
+
         tech_candidates = [
             "python", "java", "sql", "aws", "sagemaker", "sagemaker studio", "sagemaker pipelines",
             "model registry", "experiment tracking", "hyperparameter tuning", "batch inference",
@@ -302,7 +288,12 @@ Return only JSON.
             "supervised", "unsupervised", "reinforcement learning", "documentation", "agile"
         ]
         explicit_tech = [t for t in tech_candidates if t in jd_lower]
-        return {"must_have": must_have, "nice_to_have": nice_to_have, "explicit_tech": explicit_tech, "raw": job_description}
+        return {
+            "must_have": must_have,
+            "nice_to_have": nice_to_have,
+            "explicit_tech": explicit_tech,
+            "raw": job_description,
+        }
 
     def _extract_section_bullets(self, text: str, section_names: List[str]) -> List[str]:
         lines = [line.strip("*- \t") for line in text.splitlines() if line.strip()]
@@ -326,6 +317,7 @@ Return only JSON.
         for role, bullets in structured_resume["experience"].items():
             for bullet in bullets:
                 experience_bullets.append({"role": role, "text": bullet, "lower": bullet.lower()})
+
         evidence = {}
         for tech in jd_signals["explicit_tech"]:
             summary_hit = tech in summary_text
@@ -344,8 +336,7 @@ Return only JSON.
             return "strong"
         if len(exp_hits) == 1:
             return "medium"
-        replaceable = {"java", "crewai", "pydantic", "tensorflow", "computer vision", "recommender systems"}
-        if tech in replaceable and (summary_hit or skills_hit):
+        if tech in self.replaceable_terms and (summary_hit or skills_hit):
             return "weak"
         if summary_hit or skills_hit:
             return "weak"
@@ -363,7 +354,9 @@ Return only JSON.
         forced_tool_signals = self._find_forced_tool_signals(bullets, jd_signals["explicit_tech"])
         naturalness = self._naturalness_analysis(bullets)
         role_scope = self._role_scope_balance(structured_resume)
-        realism_penalty = self._realism_penalty(generic_hits, unsupported_skills, repetitive_starts, forced_tool_signals, naturalness, role_scope, job_type)
+        realism_penalty = self._realism_penalty(
+            generic_hits, unsupported_skills, repetitive_starts, forced_tool_signals, naturalness, role_scope, job_type
+        )
         return {
             "evidence_summary": evidence_summary,
             "generic_phrase_hits": generic_hits,
@@ -388,8 +381,12 @@ Return only JSON.
         for _, values in structured_resume["skills"].items():
             if isinstance(values, str):
                 skills_text.extend([s.strip() for s in values.split(",") if s.strip()])
-        bullets_text = " ".join(bullet.lower() for role_bullets in structured_resume["experience"].values() for bullet in role_bullets)
+
+        bullets_text = " ".join(
+            bullet.lower() for role_bullets in structured_resume["experience"].values() for bullet in role_bullets
+        )
         summary_text = " ".join(structured_resume["summary"]).lower()
+
         unsupported = []
         for skill in skills_text:
             normalized = skill.lower().strip()
@@ -400,8 +397,7 @@ Return only JSON.
             is_core = normalized in self.core_capability_terms or any(core in normalized for core in self.core_capability_terms)
             if not is_core:
                 continue
-            replaceable = {"java", "crewai", "pydantic", "tensorflow", "computer vision", "recommender systems"}
-            if job_type.lower() == "fulltime" and normalized in replaceable:
+            if job_type.lower() == "fulltime" and normalized in self.replaceable_terms:
                 continue
             if normalized not in bullets_text and normalized not in summary_text:
                 unsupported.append(skill)
@@ -436,7 +432,9 @@ Return only JSON.
         return {"with_metrics": with_metrics, "total_bullets": total, "ratio": round(with_metrics / total, 2)}
 
     def _domain_consistency(self, structured_resume: dict) -> dict:
-        experience_text = " ".join(bullet.lower() for role_bullets in structured_resume["experience"].values() for bullet in role_bullets)
+        experience_text = " ".join(
+            bullet.lower() for role_bullets in structured_resume["experience"].values() for bullet in role_bullets
+        )
         domains = {
             "ml_platform": ["sagemaker", "model registry", "experiment tracking", "batch inference", "endpoint", "monitoring", "retraining"],
             "data_engineering": ["etl", "spark", "glue", "redshift", "emr", "athena", "warehouse", "pipeline"],
@@ -468,10 +466,7 @@ Return only JSON.
         return signals[:8]
 
     def _naturalness_analysis(self, bullets: List[str]) -> dict:
-        templated = []
-        vague = []
-        realistic = []
-        overloaded = []
+        templated, vague, realistic, overloaded = [], [], [], []
         for bullet in bullets:
             lower = bullet.lower().strip()
             weak_hits = sum(1 for pat in self.weak_claim_patterns if re.search(pat, lower))
@@ -481,6 +476,7 @@ Return only JSON.
             object_hits = sum(1 for term in self.concrete_object_terms if term in lower)
             tool_hits = len(re.findall(r"\b(aws|sagemaker|docker|kubernetes|ecr|glue|athena|emr|lambda|fastapi|openai|langchain|pytorch|tensorflow|xgboost|scikit-learn|spark|sql|java)\b", lower))
             metric_hits = len(re.findall(r"\d+%|\d[\d,]*\+?|\bms\b|\bsec\b|\bseconds\b|\bminutes\b|\busers\b|\brequests\b", lower))
+
             if weak_hits >= 1 and workflow_hits == 0 and metric_hits == 0:
                 vague.append(bullet)
             if tool_hits >= 4 and object_hits == 0 and metric_hits == 0:
@@ -489,9 +485,18 @@ Return only JSON.
                 realistic.append(bullet)
             if weak_hits >= 1 or (re.search(r"\b(designed|built|implemented|developed)\b.+\b(using|with)\b.+\b(enabling|supporting)\b", lower) and object_hits == 0):
                 templated.append(bullet)
+
         total = max(len(bullets), 1)
-        natural_score = max(0, min(10, round(6 + (len(realistic) / total) * 5 - (len(vague) / total) * 3 - (len(overloaded) / total) * 3 - (len(templated) / total) * 2)))
-        return {"templated": templated[:10], "vague": vague[:10], "realistic": realistic[:10], "overloaded": overloaded[:10], "naturalness_score": natural_score}
+        natural_score = max(0, min(10, round(
+            6 + (len(realistic) / total) * 5 - (len(vague) / total) * 3 - (len(overloaded) / total) * 3 - (len(templated) / total) * 2
+        )))
+        return {
+            "templated": templated[:10],
+            "vague": vague[:10],
+            "realistic": realistic[:10],
+            "overloaded": overloaded[:10],
+            "naturalness_score": natural_score,
+        }
 
     def _role_scope_balance(self, structured_resume: dict) -> dict:
         role_results = {}
@@ -523,35 +528,42 @@ Return only JSON.
             penalty = max(0, penalty - 4)
         return max(0, min(penalty, 24))
 
-    def _apply_post_score_adjustments(self, result: dict, heuristic: dict, job_type: str) -> dict:
+    def _apply_post_score_adjustments(self, result: dict, heuristic: dict, jd_signals: dict, job_type: str) -> dict:
         score = int(result.get("score", 0))
         score -= heuristic.get("realism_penalty", 0)
+
         if len(heuristic.get("generic_phrase_hits", [])) >= 5:
             score -= 4 if job_type.lower() == "fulltime" else 2
+
         naturalness = heuristic.get("naturalness", {})
         if naturalness.get("naturalness_score", 10) <= 4:
             score -= 6 if job_type.lower() == "fulltime" else 3
         elif naturalness.get("naturalness_score", 10) <= 6:
             score -= 3 if job_type.lower() == "fulltime" else 1
+
         evidence_summary = heuristic.get("evidence_summary", {})
         strong_count = len(evidence_summary.get("strong", []))
         weak_count = len(evidence_summary.get("weak_or_missing", []))
         if strong_count <= 4 and weak_count >= 6:
             score = min(score, 82 if job_type.lower() == "fulltime" else 86)
+
         unsupported_count = len(heuristic.get("unsupported_skills", []))
         if unsupported_count >= 6:
             score = min(score, 84 if job_type.lower() == "fulltime" else 88)
         elif unsupported_count >= 4:
             score = min(score, 87 if job_type.lower() == "fulltime" else 90)
+
         recruiter_conf = result.get("recruiter_confidence", "medium")
         if heuristic.get("weak_bullets") or heuristic.get("forced_tool_signals") or heuristic.get("naturalness", {}).get("vague"):
             recruiter_conf = "medium" if recruiter_conf == "high" else "low"
         if heuristic.get("naturalness", {}).get("realistic") and not heuristic.get("naturalness", {}).get("overloaded"):
             if recruiter_conf == "low":
                 recruiter_conf = "medium"
+
         metrics_ratio = heuristic.get("metrics_ratio", {}).get("ratio", 0)
         if metrics_ratio < 0.2:
             score -= 3 if job_type.lower() == "fulltime" else 1
+
         score = max(0, min(score, 100))
         result["score"] = score
         result["passed"] = score >= 85
@@ -571,7 +583,10 @@ Return only JSON.
 
         wording_gaps = result.get("wording_gaps", [])
         if heuristic.get("repetitive_bullet_starts"):
-            wording_gaps.append("Repeated bullet openings reduce natural tone: " + ", ".join(f"{k} ({v}x)" for k, v in heuristic["repetitive_bullet_starts"].items()))
+            wording_gaps.append(
+                "Repeated bullet openings reduce natural tone: "
+                + ", ".join(f"{k} ({v}x)" for k, v in heuristic["repetitive_bullet_starts"].items())
+            )
         if heuristic.get("weak_bullets"):
             wording_gaps.append("Several bullets mention tools and actions but not a concrete outcome.")
         if heuristic.get("naturalness", {}).get("templated"):
@@ -609,13 +624,116 @@ Return only JSON.
         if heuristic.get("metrics_ratio", {}).get("ratio", 0) < 0.25:
             top_fixes.append("Add more grounded outcomes like throughput, latency, cost reduction, coverage, or user volume.")
         result["top_fixes"] = top_fixes[:10]
+
         return result
+
+    def _build_writer_feedback(self, score_result: dict, heuristic: dict, jd_signals: dict, job_type: str) -> dict:
+        core_ownership_areas = self._infer_core_ownership_areas(jd_signals["explicit_tech"])
+        skills_to_emphasize = [
+            skill for skill in jd_signals["explicit_tech"]
+            if skill not in self.granular_skill_terms and skill not in self.replaceable_terms
+        ][:10]
+        skills_ok_in_skills_only = [
+            skill for skill in jd_signals["explicit_tech"]
+            if skill in self.granular_skill_terms or (job_type.lower() == "fulltime" and skill in self.replaceable_terms)
+        ][:10]
+
+        bad_patterns = [
+            "Do not stack 4+ tools in a single bullet unless the workflow truly requires it.",
+            "Do not write summary bullets like a pasted job title or JD mirror.",
+            "Do not use generic claims such as proven track record, strong experience, or demonstrated ability.",
+            "Do not force defense, national security, or clearance wording unless extensively proven.",
+            "Do not force replaceable skills equally. Python can carry more weight than Java in Fulltime mode.",
+        ]
+
+        rewrite_examples = [
+            {
+                "bad": "Worked on SageMaker, Docker, Kubernetes, and MLflow for model deployment.",
+                "better": "Built SageMaker deployment workflows for batch and real-time inference, packaged services in Docker, and tracked model versions in MLflow to support controlled releases."
+            },
+            {
+                "bad": "Designed and implemented ML pipelines using Python and AWS for business needs.",
+                "better": "Built Python-based training and scoring workflows on AWS to process call transcripts, generate features, and refresh sentiment models used by operations teams."
+            },
+            {
+                "bad": "Used LangChain, OpenAI, and vector databases for RAG.",
+                "better": "Developed a RAG service that retrieved policy content from a vector index and injected grounded context into GPT responses, reducing repetitive support queries."
+            },
+            {
+                "bad": "Responsible for model monitoring and retraining.",
+                "better": "Implemented monitoring for prediction drift and response quality, then triggered retraining jobs when model accuracy dropped below service thresholds."
+            },
+            {
+                "bad": "Worked with healthcare data and ML models.",
+                "better": "Processed healthcare call transcripts and policy documents to build classification and retrieval workflows supporting agent assistance and document search."
+            },
+        ]
+
+        summary_guidance = (
+            "Write summary with about 60% target-role alignment and 40% production systems or business-operational context. "
+            "Avoid metrics, avoid forced domain branding, and prefer concrete identity like ML workflows, inference services, model deployment, monitoring, or retrieval systems."
+        )
+
+        return {
+            "core_ownership_areas": core_ownership_areas,
+            "skills_to_emphasize": skills_to_emphasize,
+            "skills_ok_in_skills_only": skills_ok_in_skills_only,
+            "bad_patterns_to_avoid": bad_patterns,
+            "rewrite_examples": rewrite_examples,
+            "summary_guidance": summary_guidance,
+        }
+
+    def _infer_core_ownership_areas(self, explicit_tech: List[str]) -> List[str]:
+        areas = []
+        tech_set = set(explicit_tech)
+
+        if {"sagemaker", "sagemaker pipelines", "batch inference", "managed endpoints"} & tech_set:
+            areas.append("model deployment and inference workflows")
+        if {"model registry", "experiment tracking", "mlops", "ci/cd", "monitoring", "retraining"} & tech_set:
+            areas.append("model lifecycle management")
+        if {"glue", "athena", "emr", "redshift", "lambda", "feature engineering", "s3"} & tech_set:
+            areas.append("data ingestion and feature engineering pipelines")
+        if {"openai", "llm", "rag", "langchain", "langgraph", "crewai"} & tech_set:
+            areas.append("llm application and orchestration workflows")
+        if {"docker", "kubernetes", "ecr"} & tech_set:
+            areas.append("containerized deployment and runtime operations")
+        if {"iam", "vpc", "encryption"} & tech_set:
+            areas.append("secure cloud deployment controls")
+        if {"documentation", "agile"} & tech_set:
+            areas.append("delivery, collaboration, and implementation documentation")
+
+        return areas[:7]
+
+    def get_improvement_summary(self, score_result: dict) -> str:
+        parts = []
+        parts.append(f"STRICT ATS SCORE: {score_result.get('score', 0)}/100")
+        parts.append(f"ATS CONFIDENCE: {score_result.get('ats_confidence', 'unknown')}")
+        parts.append(f"RECRUITER CONFIDENCE: {score_result.get('recruiter_confidence', 'unknown')}")
+
+        if score_result.get("top_fixes"):
+            parts.append("TOP FIXES:")
+            for i, item in enumerate(score_result["top_fixes"][:8], 1):
+                parts.append(f"  {i}. {item}")
+
+        writer_feedback = score_result.get("writer_feedback", {})
+        if writer_feedback:
+            parts.append("WRITER FEEDBACK:")
+            if writer_feedback.get("core_ownership_areas"):
+                parts.append("  Ownership areas: " + ", ".join(writer_feedback["core_ownership_areas"]))
+            if writer_feedback.get("skills_to_emphasize"):
+                parts.append("  Emphasize: " + ", ".join(writer_feedback["skills_to_emphasize"]))
+            if writer_feedback.get("skills_ok_in_skills_only"):
+                parts.append("  Skills-only is okay for: " + ", ".join(writer_feedback["skills_ok_in_skills_only"]))
+
+        return "\n".join(parts)
 
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
+
     scorer = ScorerAgent()
+
     test_jd = """
 Senior AI Engineer
 Requirements:
@@ -625,6 +743,7 @@ Requirements:
 - LLMs
 - monitoring
 """
+
     test_resume = {
         "summary": ["AI engineer with 5+ years building LLM workflows."],
         "skills": {"Programming": "Python, Java", "AI Frameworks": "LangChain, CrewAI"},
@@ -633,5 +752,6 @@ Requirements:
         "byjus": ["Trained classification models using scikit-learn."],
         "cognizant": ["Developed backend services and automation scripts."]
     }
+
     result = scorer.score_resume(test_jd, test_resume, job_type="Fulltime")
     print(json.dumps(result, indent=2))
