@@ -1,13 +1,14 @@
 """
 Strict ATS + Resume Realism Scorer
 
-Key upgrades in this version:
-1. Scores evidence, not just keyword presence.
-2. Treats Fulltime and Contract differently.
-3. Allows granular tools to remain in Skills without forcing every one into bullets.
-4. Penalizes fake-sounding wording, inflated scope, and overloaded bullets.
-5. Produces writer-ready feedback with concrete rewrite suggestions and examples.
-6. Gives lighter ATS treatment for Contract and stricter realism treatment for Fulltime.
+Designed to work with the paired writer agent and guidelines.
+Key features:
+- scores evidence, realism, and recruiter trust not just keywords
+- treats Fulltime and Contract differently
+- allows granular skills to remain in Skills
+- does not over-penalize replaceable skills in Fulltime mode
+- generates writer-ready feedback with rewrite examples
+- excludes rulebook-approved differences such as summary length and date mode
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import os
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 from openai import OpenAI
 
@@ -26,7 +27,8 @@ class ScorerAgent:
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.client = OpenAI(api_key=self.api_key)
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
+        # High-reasoning default. Override with OPENAI_MODEL if needed.
+        self.model = os.getenv("OPENAI_MODEL", "gpt-5-pro")
 
         config_dir = Path(__file__).parent.parent / "config"
         self.guidelines = ""
@@ -34,77 +36,59 @@ class ScorerAgent:
         if guidelines_path.exists():
             self.guidelines = guidelines_path.read_text(encoding="utf-8")
 
-        self.generic_phrases = [
-            "proven track record",
-            "demonstrated ability",
-            "deep background",
-            "cutting-edge",
-            "world-class",
-            "best-in-class",
-            "delivering business value",
-            "robust solutions",
-            "hands-on experience",
-            "strong experience",
-            "expertise in",
-        ]
-
-        self.core_capability_terms = {
-            "python", "sql", "aws", "sagemaker", "sagemaker pipelines", "model registry",
-            "experiment tracking", "hyperparameter tuning", "batch inference", "managed endpoints",
-            "docker", "kubernetes", "mlops", "ci/cd", "monitoring", "retraining",
-            "feature engineering", "pytorch", "tensorflow", "scikit-learn", "xgboost",
-            "openai", "llm", "rag", "langchain", "langgraph", "crewai", "pydantic", "java",
-            "computer vision", "recommender systems", "documentation", "agile"
-        }
-
-        self.granular_skill_terms = {
-            "glue", "ecr", "iam", "vpc", "athena", "redshift", "lambda", "emr",
-            "cloudwatch", "bedrock", "fastapi", "llamaindex", "redis", "postgresql",
-            "snowflake", "bigquery", "encryption", "access controls", "step functions"
+        self.generic_phrases = {
+            "proven track record", "demonstrated ability", "deep expertise",
+            "strong experience", "hands-on experience", "expertise in",
+            "cutting-edge", "best-in-class", "world-class", "robust solutions",
+            "delivering business value"
         }
 
         self.replaceable_terms = {
             "java", "crewai", "pydantic", "tensorflow", "computer vision", "recommender systems"
         }
 
-        self.weak_claim_patterns = [
-            r"\bresponsible for\b",
-            r"\bworked on\b",
-            r"\bworked with\b",
-            r"\bhelped with\b",
-            r"\binvolved in\b",
-            r"\bvarious\b",
-            r"\bmultiple\b",
-            r"\bseveral\b",
-            r"\bdesign and implement\b",
-            r"\bbuild and deploy\b",
-            r"\bdevelop and maintain\b",
-        ]
-
-        self.real_workflow_signals = {
-            "data_movement": ["ingest", "extracted", "loaded", "parsed", "transformed", "joined", "partitioned"],
-            "serving": ["endpoint", "batch inference", "real-time", "latency", "throughput", "autoscaling"],
-            "training": ["training job", "hyperparameter", "cross-validation", "evaluation", "registry", "drift"],
-            "ops": ["alert", "rollback", "failure", "retry", "scheduler", "trigger", "deployed"],
-            "security": ["iam", "vpc", "kms", "encryption", "access policy", "private subnet"],
+        self.granular_skill_terms = {
+            "glue", "ecr", "iam", "vpc", "athena", "redshift", "lambda", "emr",
+            "cloudwatch", "bedrock", "step functions", "fastapi", "llamaindex",
+            "redis", "postgresql", "snowflake", "bigquery", "encryption"
         }
 
-        self.concrete_object_terms = [
-            "resume", "job listing", "policy document", "call transcript", "feature table",
-            "training dataset", "inference endpoint", "model artifact", "prediction payload",
-            "embedding", "vector index", "warehouse table", "batch job", "api request",
-            "customer profile", "recommendation feed", "image dataset", "document corpus",
-            "sales record", "support ticket", "document archive", "call log"
-        ]
+        self.core_capability_terms = {
+            "python", "sql", "aws", "azure", "sagemaker", "sagemaker pipelines",
+            "model registry", "experiment tracking", "hyperparameter tuning", "batch inference",
+            "managed endpoints", "docker", "kubernetes", "mlops", "ci/cd", "monitoring",
+            "retraining", "feature engineering", "pytorch", "scikit-learn", "xgboost",
+            "openai", "llm", "rag", "langchain", "langgraph", "documentation",
+            "agile", "governance", "architecture", "vector databases", "embeddings"
+        }
+
+        self.workflow_terms = {
+            "data_objects": [
+                "call transcript", "policy document", "resume", "job listing", "training dataset",
+                "feature table", "vector index", "model artifact", "endpoint", "batch job",
+                "api request", "document corpus", "customer profile", "warehouse table"
+            ],
+            "ops": [
+                "monitoring", "drift", "alert", "retry", "rollback", "autoscaling",
+                "latency", "throughput", "endpoint", "batch inference", "real-time"
+            ],
+            "training": [
+                "training", "evaluation", "cross-validation", "hyperparameter", "registry",
+                "retraining", "fine-tuned", "lora", "qlora"
+            ],
+            "architecture": [
+                "review", "guardrail", "blueprint", "reference architecture", "technical design",
+                "integration pattern", "orchestration", "data flow", "vendor evaluation", "roadmap"
+            ]
+        }
 
     def score_resume(self, job_description: str, resume_content: dict, job_type: str = "Fulltime") -> dict:
         resume_text = self._format_resume_for_review(resume_content)
-        structured_resume = self._extract_resume_structure(resume_content, resume_text)
+        structured_resume = self._extract_resume_structure(resume_content)
         jd_signals = self._extract_jd_signals(job_description)
-        evidence = self._build_evidence_map(structured_resume, jd_signals)
-        heuristic = self._heuristic_analysis(job_description, structured_resume, jd_signals, evidence, job_type)
+        heuristic = self._heuristic_analysis(structured_resume, jd_signals, job_type)
 
-        json_schema = {
+        schema = {
             "score": 0,
             "passed": False,
             "ats_confidence": "low|medium|high",
@@ -139,20 +123,20 @@ You are a strict ATS and recruiter-quality resume evaluator.
 
 Job type: {job_type}
 
-Scoring principles:
-- Core capabilities get full credit only when supported by believable work bullets.
-- Summary and skills sections alone are weaker evidence than work experience.
-- Granular tools can appear only in the Skills section without a heavy penalty.
-- For Fulltime resumes, be stricter on realism, selective emphasis, and forced JD mirroring.
-- For Contract resumes, allow broader keyword mirroring and slightly lighter realism penalties if still believable.
-- Replaceable skills do not need equal emphasis.
-- If Python is strongly evidenced, do not over-penalize lighter Java emphasis unless Java is central to the JD.
-- Do not over-penalize optional or replaceable skills that appear in Skills but are not heavily emphasized in bullets.
-- Penalize generic wording, vague claims, and overloaded bullets.
-- Prefer bullets that show a real workflow: object or data, action, system, and outcome.
+You must score realistically, not generously.
+Important rules:
+- score evidence inside work bullets more than summary or skills
+- do not over-penalize rulebook-approved differences such as summary length, date mode, or selective emphasis of replaceable skills
+- in Fulltime mode, be stricter about realism and inflated wording
+- in Contract mode, allow broader keyword mirroring if still believable
+- granular tools may stay only in Skills without heavy penalty
+- replaceable skills such as Java vs Python or CrewAI vs LangChain do not need equal emphasis in Fulltime mode
+- penalize inflated architect claims if work bullets do not support them
+- separate ATS fit from recruiter trust
+- produce writer-ready feedback with concrete rewrite examples
 
-Return ONLY valid JSON matching this shape:
-{json.dumps(json_schema, indent=2)}
+Return only valid JSON matching this schema:
+{json.dumps(schema, indent=2)}
 """
 
         user_prompt = f"""
@@ -166,34 +150,25 @@ HEURISTIC ANALYSIS
 {json.dumps(heuristic, indent=2)}
 
 Evaluate strictly but fairly.
-If must-haves appear mostly in summary or skills but not in experience, lower the score.
-For Fulltime resumes, be harder on forced or inflated wording.
-For Contract resumes, be lighter on broader keyword coverage if the bullets still sound believable.
-
-Important:
-In writer_feedback, give concrete guidance and example rewrites that a resume generator can directly use.
+Do not score down for rulebook-approved differences.
+Give concrete rewrite suggestions the writer can use in the next iteration.
 Return only JSON.
 """
 
-        response = self.client.chat.completions.create(
+        response = self.client.responses.create(
             model=self.model,
-            messages=[
+            reasoning={"effort": "high"},
+            text={"format": {"type": "text"}},
+            input=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            max_tokens=3500,
-            temperature=0.15,
         )
 
-        content = response.choices[0].message.content or ""
-        if "```json" in content:
-            content = content.split("```json", 1)[1].split("```", 1)[0]
-        elif "```" in content:
-            content = content.split("```", 1)[1].split("```", 1)[0]
-
+        content = getattr(response, "output_text", "") or ""
         try:
             result = json.loads(content.strip())
-        except json.JSONDecodeError:
+        except Exception:
             result = {
                 "score": 0,
                 "passed": False,
@@ -216,542 +191,302 @@ Return only JSON.
                 }
             }
 
-        result = self._apply_post_score_adjustments(result, heuristic, jd_signals, job_type)
+        result = self._apply_post_adjustments(result, heuristic, jd_signals, job_type)
         result["writer_feedback"] = self._build_writer_feedback(result, heuristic, jd_signals, job_type)
         return result
 
     def _format_resume_for_review(self, resume_content: dict) -> str:
-        sections: List[str] = []
+        lines: List[str] = []
         if "summary" in resume_content:
-            sections.append("## SUMMARY")
-            summary = resume_content["summary"]
-            if isinstance(summary, list):
-                for bullet in summary:
-                    sections.append(f"* {bullet}")
-            else:
-                sections.append(str(summary))
-
+            lines.append("## SUMMARY")
+            for item in resume_content["summary"]:
+                lines.append(f"- {item}")
         if "skills" in resume_content:
-            sections.append("\n## TECHNICAL SKILLS")
-            skills = resume_content["skills"]
-            if isinstance(skills, dict):
-                for category, values in skills.items():
-                    sections.append(f"{category}: {values}")
-            else:
-                sections.append(str(skills))
-
-        experience_mapping = {
+            lines.append("\n## TECHNICAL SKILLS")
+            for category, skills in resume_content["skills"].items():
+                lines.append(f"{category}: {skills}")
+        mapping = {
             "bee_data": "## BEE DATA TECHNOLOGIES",
             "allied_health": "## ALLIED HEALTH AGENCY",
             "byjus": "## BYJU'S",
             "cognizant": "## COGNIZANT",
         }
-        for key, header in experience_mapping.items():
+        for key, header in mapping.items():
             if key in resume_content:
-                sections.append(f"\n{header}")
-                items = resume_content[key]
-                if isinstance(items, list):
-                    for bullet in items:
-                        sections.append(f"* {bullet}")
-                else:
-                    sections.append(str(items))
-        return "\n".join(sections)
+                lines.append(f"\n{header}")
+                for item in resume_content[key]:
+                    lines.append(f"- {item}")
+        return "\n".join(lines)
 
-    def _extract_resume_structure(self, resume_content: dict, resume_text: str) -> dict:
-        summary = resume_content.get("summary", [])
-        skills = resume_content.get("skills", {})
-        experience = {}
-        for key in ["bee_data", "allied_health", "byjus", "cognizant"]:
-            if key in resume_content:
-                bullets = resume_content[key]
-                experience[key] = bullets if isinstance(bullets, list) else [str(bullets)]
+    def _extract_resume_structure(self, resume_content: dict) -> dict:
         return {
-            "summary": summary if isinstance(summary, list) else [str(summary)],
-            "skills": skills if isinstance(skills, dict) else {"General": str(skills)},
-            "experience": experience,
-            "resume_text": resume_text,
+            "summary": resume_content.get("summary", []),
+            "skills": resume_content.get("skills", {}),
+            "experience": {
+                k: resume_content.get(k, [])
+                for k in ["bee_data", "allied_health", "byjus", "cognizant"]
+            }
         }
 
     def _extract_jd_signals(self, job_description: str) -> dict:
         jd_lower = job_description.lower()
-        must_have = self._extract_section_bullets(job_description, ["must have", "you have", "requirements", "required"])
-        nice_to_have = self._extract_section_bullets(job_description, ["nice if you have", "preferred", "plus", "good to have"])
-
-        tech_candidates = [
-            "python", "java", "sql", "aws", "sagemaker", "sagemaker studio", "sagemaker pipelines",
-            "model registry", "experiment tracking", "hyperparameter tuning", "batch inference",
-            "managed endpoints", "docker", "ecr", "kubernetes", "glue", "redshift", "emr",
-            "athena", "lambda", "step functions", "pytorch", "tensorflow", "scikit-learn",
-            "xgboost", "openai", "llm", "rag", "iam", "vpc", "encryption", "mlops", "ci/cd",
-            "model versioning", "monitoring", "retraining", "feature engineering", "s3",
-            "langchain", "langgraph", "crewai", "pydantic", "computer vision", "recommender systems",
-            "supervised", "unsupervised", "reinforcement learning", "documentation", "agile"
+        candidates = [
+            "python", "java", "aws", "azure", "sagemaker", "docker", "kubernetes",
+            "langchain", "crewai", "pydantic", "llm", "rag", "vector databases",
+            "embeddings", "monitoring", "retraining", "documentation", "agile",
+            "governance", "architecture", "reference architecture", "pi planning",
+            "art", "architectural runway", "vendor evaluation", "model registry",
+            "experiment tracking", "feature engineering", "computer vision", "recommender systems"
         ]
-        explicit_tech = [t for t in tech_candidates if t in jd_lower]
-        return {
-            "must_have": must_have,
-            "nice_to_have": nice_to_have,
-            "explicit_tech": explicit_tech,
-            "raw": job_description,
-        }
+        explicit = [c for c in candidates if c in jd_lower]
+        return {"raw": job_description, "explicit": explicit}
 
-    def _extract_section_bullets(self, text: str, section_names: List[str]) -> List[str]:
-        lines = [line.strip("*- \t") for line in text.splitlines() if line.strip()]
-        collected = []
-        capture = False
-        for line in lines:
-            lower = line.lower()
-            if any(name in lower for name in section_names):
-                capture = True
-                continue
-            if capture and re.match(r"^[A-Z][A-Za-z /&]{1,40}:?$", line) and not line.lower().startswith("experience"):
-                capture = False
-            if capture:
-                collected.append(line)
-        return collected
-
-    def _build_evidence_map(self, structured_resume: dict, jd_signals: dict) -> dict:
+    def _heuristic_analysis(self, structured_resume: dict, jd_signals: dict, job_type: str) -> dict:
         summary_text = " ".join(structured_resume["summary"]).lower()
-        skills_text = " ".join([f"{k} {v}" for k, v in structured_resume["skills"].items()]).lower()
-        experience_bullets = []
-        for role, bullets in structured_resume["experience"].items():
-            for bullet in bullets:
-                experience_bullets.append({"role": role, "text": bullet, "lower": bullet.lower()})
+        skills_text = " ".join(f"{k} {v}" for k, v in structured_resume["skills"].items()).lower()
+        bullets = [b for section in structured_resume["experience"].values() for b in section]
+        bullets_text = " ".join(bullets).lower()
 
-        evidence = {}
-        for tech in jd_signals["explicit_tech"]:
-            summary_hit = tech in summary_text
-            skills_hit = tech in skills_text
-            exp_hits = [b["text"] for b in experience_bullets if tech in b["lower"]]
-            evidence[tech] = {
-                "summary": summary_hit,
-                "skills": skills_hit,
-                "experience_hits": exp_hits,
-                "strength": self._evidence_strength(tech, summary_hit, skills_hit, exp_hits),
-            }
-        return evidence
+        evidence = {"strong": [], "medium": [], "weak_or_missing": []}
+        unsupported_core = []
+        for term in jd_signals["explicit"]:
+            exp_hits = sum(1 for b in bullets if term in b.lower())
+            in_summary = term in summary_text
+            in_skills = term in skills_text
+            if exp_hits >= 2:
+                evidence["strong"].append(term)
+            elif exp_hits == 1:
+                evidence["medium"].append(term)
+            else:
+                evidence["weak_or_missing"].append(term)
+                if term in self.core_capability_terms and not (
+                    job_type.lower() == "fulltime" and term in self.replaceable_terms
+                ):
+                    if not (in_summary or in_skills):
+                        unsupported_core.append(term)
 
-    def _evidence_strength(self, tech: str, summary_hit: bool, skills_hit: bool, exp_hits: List[str]) -> str:
-        if len(exp_hits) >= 2:
-            return "strong"
-        if len(exp_hits) == 1:
-            return "medium"
-        if tech in self.replaceable_terms and (summary_hit or skills_hit):
-            return "weak"
-        if summary_hit or skills_hit:
-            return "weak"
-        return "missing"
-
-    def _heuristic_analysis(self, job_description: str, structured_resume: dict, jd_signals: dict, evidence: dict, job_type: str) -> dict:
-        bullets = [b for role_bullets in structured_resume["experience"].values() for b in role_bullets]
-        generic_hits = self._count_generic_phrases(structured_resume["resume_text"])
-        unsupported_skills = self._find_unsupported_skills(structured_resume, job_type)
-        repetitive_starts = self._find_repetitive_bullets(bullets)
-        weak_bullets = self._find_weak_bullets(bullets)
+        generic_hits = [p for p in self.generic_phrases if p in (summary_text + " " + bullets_text)]
+        repetitive_starts = self._repetitive_starts(bullets)
+        vague_bullets = [b for b in bullets if self._is_vague_bullet(b)]
+        overloaded_bullets = [b for b in bullets if self._is_overloaded_bullet(b)]
+        realistic_bullets = [b for b in bullets if self._is_grounded_bullet(b)]
         metrics_ratio = self._metrics_ratio(bullets)
-        domain_signals = self._domain_consistency(structured_resume)
-        evidence_summary = self._summarize_evidence(evidence)
-        forced_tool_signals = self._find_forced_tool_signals(bullets, jd_signals["explicit_tech"])
-        naturalness = self._naturalness_analysis(bullets)
-        role_scope = self._role_scope_balance(structured_resume)
-        realism_penalty = self._realism_penalty(
-            generic_hits, unsupported_skills, repetitive_starts, forced_tool_signals, naturalness, role_scope, job_type
-        )
+        role_scope = self._role_scope(structured_resume["experience"])
+
         return {
-            "evidence_summary": evidence_summary,
-            "generic_phrase_hits": generic_hits,
-            "unsupported_skills": unsupported_skills,
-            "repetitive_bullet_starts": repetitive_starts,
-            "weak_bullets": weak_bullets,
+            "evidence": evidence,
+            "unsupported_core": unsupported_core,
+            "generic_hits": generic_hits,
+            "repetitive_starts": repetitive_starts,
+            "vague_bullets": vague_bullets[:8],
+            "overloaded_bullets": overloaded_bullets[:8],
+            "realistic_bullets": realistic_bullets[:8],
             "metrics_ratio": metrics_ratio,
-            "domain_consistency": domain_signals,
-            "forced_tool_signals": forced_tool_signals,
-            "naturalness": naturalness,
             "role_scope": role_scope,
-            "realism_penalty": realism_penalty,
             "job_type": job_type,
         }
 
-    def _count_generic_phrases(self, text: str) -> List[str]:
-        lower = text.lower()
-        return [phrase for phrase in self.generic_phrases if phrase in lower]
-
-    def _find_unsupported_skills(self, structured_resume: dict, job_type: str) -> List[str]:
-        skills_text = []
-        for _, values in structured_resume["skills"].items():
-            if isinstance(values, str):
-                skills_text.extend([s.strip() for s in values.split(",") if s.strip()])
-
-        bullets_text = " ".join(
-            bullet.lower() for role_bullets in structured_resume["experience"].values() for bullet in role_bullets
-        )
-        summary_text = " ".join(structured_resume["summary"]).lower()
-
-        unsupported = []
-        for skill in skills_text:
-            normalized = skill.lower().strip()
-            if len(normalized) < 3:
-                continue
-            if normalized in self.granular_skill_terms:
-                continue
-            is_core = normalized in self.core_capability_terms or any(core in normalized for core in self.core_capability_terms)
-            if not is_core:
-                continue
-            if job_type.lower() == "fulltime" and normalized in self.replaceable_terms:
-                continue
-            if normalized not in bullets_text and normalized not in summary_text:
-                unsupported.append(skill)
-        return unsupported[:12]
-
-    def _find_repetitive_bullets(self, bullets: List[str]) -> Dict[str, int]:
-        starts = []
+    def _repetitive_starts(self, bullets: List[str]) -> Dict[str, int]:
+        counts = Counter()
         for bullet in bullets:
             words = bullet.strip().split()
             if words:
-                starts.append(words[0].lower())
-        counts = Counter(starts)
+                counts[words[0].lower()] += 1
         return {k: v for k, v in counts.items() if v >= 3}
 
-    def _find_weak_bullets(self, bullets: List[str]) -> List[str]:
-        weak = []
-        for bullet in bullets:
-            lower = bullet.lower()
-            has_tool = bool(re.search(r"\b(aws|python|sagemaker|docker|kubernetes|spark|openai|langchain|pytorch|tensorflow|xgboost|scikit-learn|java)\b", lower))
-            has_action = bool(re.search(r"\b(built|designed|implemented|developed|engineered|deployed|trained|configured|automated|created|integrated|optimized|documented)\b", lower))
-            has_outcome = bool(re.search(r"\b(improv|reduc|increas|serving|supporting|enabling|achiev|maintain|trigger|documented|optimized)\b", lower)) or bool(re.search(r"\d+%|\d[\d,]*\+?", lower))
-            if has_tool and has_action and not has_outcome:
-                weak.append(bullet)
-        return weak[:10]
+    def _is_vague_bullet(self, bullet: str) -> bool:
+        lower = bullet.lower()
+        weak_patterns = [
+            "worked on", "worked with", "responsible for", "helped with",
+            "strong experience", "demonstrated ability"
+        ]
+        has_weak = any(p in lower for p in weak_patterns)
+        has_object = any(x in lower for group in self.workflow_terms.values() for x in group)
+        has_metric = bool(re.search(r"\d+%|\d[\d,]*\+?|\bms\b|\busers\b|\brequests\b", lower))
+        return has_weak and not has_object and not has_metric
 
-    def _metrics_ratio(self, bullets: List[str]) -> dict:
-        with_metrics = 0
-        for bullet in bullets:
-            if re.search(r"\d+%|\d[\d,]*\+?|\bms\b|\bsec\b|\bseconds\b|\bminutes\b|\busers\b|\brequests\b", bullet.lower()):
-                with_metrics += 1
-        total = max(len(bullets), 1)
-        return {"with_metrics": with_metrics, "total_bullets": total, "ratio": round(with_metrics / total, 2)}
+    def _is_overloaded_bullet(self, bullet: str) -> bool:
+        lower = bullet.lower()
+        tool_count = len(re.findall(r"\b(aws|azure|sagemaker|docker|kubernetes|langchain|openai|pytorch|tensorflow|spark|sql|java|crewai|pydantic)\b", lower))
+        has_metric = bool(re.search(r"\d+%|\d[\d,]*\+?", lower))
+        has_object = any(x in lower for x in self.workflow_terms["data_objects"])
+        return tool_count >= 4 and not has_metric and not has_object
 
-    def _domain_consistency(self, structured_resume: dict) -> dict:
-        experience_text = " ".join(
-            bullet.lower() for role_bullets in structured_resume["experience"].values() for bullet in role_bullets
-        )
-        domains = {
-            "ml_platform": ["sagemaker", "model registry", "experiment tracking", "batch inference", "endpoint", "monitoring", "retraining"],
-            "data_engineering": ["etl", "spark", "glue", "redshift", "emr", "athena", "warehouse", "pipeline"],
-            "llm_genai": ["openai", "llm", "rag", "langchain", "langgraph", "prompt", "vector"],
-            "software_backend": ["fastapi", "api", "oauth", "service", "microservice", "java"],
-            "security_regulated": ["iam", "vpc", "encryption", "access control", "compliance", "governance"],
+    def _is_grounded_bullet(self, bullet: str) -> bool:
+        lower = bullet.lower()
+        has_object = any(x in lower for x in self.workflow_terms["data_objects"])
+        has_system = bool(re.search(r"\b(aws|azure|sagemaker|docker|kubernetes|endpoint|batch inference|api|langchain|vector)\b", lower))
+        has_result = bool(re.search(r"\d+%|\d[\d,]*\+?|\bimprov|\breduc|\bincreas|\bmaintain|\bsupport|\bserve|\benable", lower))
+        return has_object and has_system and has_result
+
+    def _metrics_ratio(self, bullets: List[str]) -> float:
+        if not bullets:
+            return 0.0
+        metric_count = sum(1 for b in bullets if re.search(r"\d+%|\d[\d,]*\+?|\bms\b|\busers\b|\brequests\b", b.lower()))
+        return round(metric_count / len(bullets), 2)
+
+    def _role_scope(self, experience: Dict[str, List[str]]) -> Dict[str, Any]:
+        result = {}
+        domain_map = {
+            "ml_platform": ["sagemaker", "registry", "endpoint", "monitoring", "retraining"],
+            "llm_apps": ["openai", "rag", "langchain", "vector", "prompt"],
+            "backend": ["api", "fastapi", "oauth", "service", "java"],
+            "data": ["spark", "etl", "warehouse", "feature engineering", "data pipeline"],
+            "architecture": ["architecture", "blueprint", "guardrail", "review", "roadmap", "vendor"],
         }
-        counts = {}
-        for domain, keywords in domains.items():
-            counts[domain] = sum(1 for kw in keywords if kw in experience_text)
-        dominant = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-        return {"counts": counts, "dominant_domains": dominant[:3]}
-
-    def _summarize_evidence(self, evidence: dict) -> dict:
-        strong = [k for k, v in evidence.items() if v["strength"] == "strong"]
-        medium = [k for k, v in evidence.items() if v["strength"] == "medium"]
-        weak = [k for k, v in evidence.items() if v["strength"] in {"weak", "missing"}]
-        return {"strong": strong, "medium": medium, "weak_or_missing": weak}
-
-    def _find_forced_tool_signals(self, bullets: List[str], jd_tech: List[str]) -> List[str]:
-        signals = []
-        for bullet in bullets:
-            lower = bullet.lower()
-            tech_hits = [t for t in jd_tech if t in lower]
-            if len(tech_hits) >= 4:
-                has_result = bool(re.search(r"\d+%|\d[\d,]*\+?|\bimprov|\breduc|\bincreas|\bserving|\bmaintain|\btrigger", lower))
-                if not has_result:
-                    signals.append(bullet)
-        return signals[:8]
-
-    def _naturalness_analysis(self, bullets: List[str]) -> dict:
-        templated, vague, realistic, overloaded = [], [], [], []
-        for bullet in bullets:
-            lower = bullet.lower().strip()
-            weak_hits = sum(1 for pat in self.weak_claim_patterns if re.search(pat, lower))
-            workflow_hits = 0
-            for _, kws in self.real_workflow_signals.items():
-                workflow_hits += sum(1 for kw in kws if kw in lower)
-            object_hits = sum(1 for term in self.concrete_object_terms if term in lower)
-            tool_hits = len(re.findall(r"\b(aws|sagemaker|docker|kubernetes|ecr|glue|athena|emr|lambda|fastapi|openai|langchain|pytorch|tensorflow|xgboost|scikit-learn|spark|sql|java)\b", lower))
-            metric_hits = len(re.findall(r"\d+%|\d[\d,]*\+?|\bms\b|\bsec\b|\bseconds\b|\bminutes\b|\busers\b|\brequests\b", lower))
-
-            if weak_hits >= 1 and workflow_hits == 0 and metric_hits == 0:
-                vague.append(bullet)
-            if tool_hits >= 4 and object_hits == 0 and metric_hits == 0:
-                overloaded.append(bullet)
-            if workflow_hits >= 2 and (object_hits >= 1 or metric_hits >= 1):
-                realistic.append(bullet)
-            if weak_hits >= 1 or (re.search(r"\b(designed|built|implemented|developed)\b.+\b(using|with)\b.+\b(enabling|supporting)\b", lower) and object_hits == 0):
-                templated.append(bullet)
-
-        total = max(len(bullets), 1)
-        natural_score = max(0, min(10, round(
-            6 + (len(realistic) / total) * 5 - (len(vague) / total) * 3 - (len(overloaded) / total) * 3 - (len(templated) / total) * 2
-        )))
-        return {
-            "templated": templated[:10],
-            "vague": vague[:10],
-            "realistic": realistic[:10],
-            "overloaded": overloaded[:10],
-            "naturalness_score": natural_score,
-        }
-
-    def _role_scope_balance(self, structured_resume: dict) -> dict:
-        role_results = {}
-        domain_keywords = {
-            "ml_platform": ["sagemaker", "registry", "experiment", "batch inference", "endpoint", "retraining"],
-            "llm_apps": ["openai", "rag", "langchain", "langgraph", "prompt", "vector"],
-            "backend_api": ["fastapi", "oauth", "api", "service", "java"],
-            "data_platform": ["spark", "etl", "warehouse", "glue", "redshift", "athena", "emr"],
-            "security": ["iam", "vpc", "encryption", "kms", "access control", "private subnet"],
-        }
-        for role, bullets in structured_resume["experience"].items():
+        for role, bullets in experience.items():
             text = " ".join(bullets).lower()
-            counts = {name: sum(1 for kw in kws if kw in text) for name, kws in domain_keywords.items()}
-            active_domains = [name for name, c in counts.items() if c >= 2]
-            role_results[role] = {"counts": counts, "active_domains": active_domains, "too_broad": len(active_domains) >= 4}
-        return role_results
+            active = []
+            for domain, kws in domain_map.items():
+                if sum(1 for kw in kws if kw in text) >= 2:
+                    active.append(domain)
+            result[role] = {"active_domains": active, "too_broad": len(active) >= 4}
+        return result
 
-    def _realism_penalty(self, generic_hits, unsupported_skills, repetitive_starts, forced_tool_signals, naturalness, role_scope, job_type):
-        penalty = 0
-        penalty += min(len(generic_hits), 6) * 2
-        penalty += min(len(unsupported_skills), 6) * 2
-        penalty += sum(max(v - 2, 0) for v in repetitive_starts.values())
-        penalty += len(forced_tool_signals) * 3
-        penalty += len(naturalness.get("vague", [])) * 1
-        penalty += len(naturalness.get("overloaded", [])) * 2
-        penalty += len([r for r, d in role_scope.items() if d.get("too_broad")]) * 2
-        penalty -= min(len(naturalness.get("realistic", [])), 4)
-        if job_type.lower() == "contract":
-            penalty = max(0, penalty - 4)
-        return max(0, min(penalty, 24))
-
-    def _apply_post_score_adjustments(self, result: dict, heuristic: dict, jd_signals: dict, job_type: str) -> dict:
+    def _apply_post_adjustments(self, result: dict, heuristic: dict, jd_signals: dict, job_type: str) -> dict:
         score = int(result.get("score", 0))
-        score -= heuristic.get("realism_penalty", 0)
-
-        if len(heuristic.get("generic_phrase_hits", [])) >= 5:
-            score -= 4 if job_type.lower() == "fulltime" else 2
-
-        naturalness = heuristic.get("naturalness", {})
-        if naturalness.get("naturalness_score", 10) <= 4:
-            score -= 6 if job_type.lower() == "fulltime" else 3
-        elif naturalness.get("naturalness_score", 10) <= 6:
+        score -= min(len(heuristic["generic_hits"]) * (3 if job_type.lower() == "fulltime" else 2), 10)
+        score -= min(len(heuristic["vague_bullets"]) * 2, 8)
+        score -= min(len(heuristic["overloaded_bullets"]) * 2, 8)
+        if heuristic["metrics_ratio"] < 0.2:
             score -= 3 if job_type.lower() == "fulltime" else 1
-
-        evidence_summary = heuristic.get("evidence_summary", {})
-        strong_count = len(evidence_summary.get("strong", []))
-        weak_count = len(evidence_summary.get("weak_or_missing", []))
-        if strong_count <= 4 and weak_count >= 6:
-            score = min(score, 82 if job_type.lower() == "fulltime" else 86)
-
-        unsupported_count = len(heuristic.get("unsupported_skills", []))
-        if unsupported_count >= 6:
+        if len(heuristic["unsupported_core"]) >= 5:
             score = min(score, 84 if job_type.lower() == "fulltime" else 88)
-        elif unsupported_count >= 4:
-            score = min(score, 87 if job_type.lower() == "fulltime" else 90)
 
         recruiter_conf = result.get("recruiter_confidence", "medium")
-        if heuristic.get("weak_bullets") or heuristic.get("forced_tool_signals") or heuristic.get("naturalness", {}).get("vague"):
-            recruiter_conf = "medium" if recruiter_conf == "high" else "low"
-        if heuristic.get("naturalness", {}).get("realistic") and not heuristic.get("naturalness", {}).get("overloaded"):
-            if recruiter_conf == "low":
-                recruiter_conf = "medium"
-
-        metrics_ratio = heuristic.get("metrics_ratio", {}).get("ratio", 0)
-        if metrics_ratio < 0.2:
-            score -= 3 if job_type.lower() == "fulltime" else 1
-
-        score = max(0, min(score, 100))
-        result["score"] = score
-        result["passed"] = score >= 85
-        result["recruiter_confidence"] = recruiter_conf
+        if heuristic["vague_bullets"] or heuristic["overloaded_bullets"]:
+            recruiter_conf = "low" if recruiter_conf != "high" else "medium"
+        elif heuristic["realistic_bullets"]:
+            recruiter_conf = "medium" if recruiter_conf == "low" else recruiter_conf
 
         forced = result.get("forced_or_generic_signals", [])
-        for phrase in heuristic.get("generic_phrase_hits", [])[:6]:
-            forced.append(f"Generic phrase used: {phrase}")
-        for item in heuristic.get("forced_tool_signals", [])[:4]:
-            forced.append(f"Tool-stacked bullet may feel forced: {item}")
-        for item in heuristic.get("naturalness", {}).get("overloaded", [])[:4]:
-            forced.append(f"Overloaded bullet without enough grounding: {item}")
-        for role, data in heuristic.get("role_scope", {}).items():
-            if data.get("too_broad") and job_type.lower() == "fulltime":
-                forced.append(f"Role scope may feel too broad for credibility: {role}")
+        forced += [f"Generic phrase used: {x}" for x in heuristic["generic_hits"][:6]]
+        forced += [f"Vague bullet: {x}" for x in heuristic["vague_bullets"][:3]]
+        forced += [f"Overloaded bullet: {x}" for x in heuristic["overloaded_bullets"][:3]]
         result["forced_or_generic_signals"] = forced[:12]
 
         wording_gaps = result.get("wording_gaps", [])
-        if heuristic.get("repetitive_bullet_starts"):
+        if heuristic["repetitive_starts"]:
             wording_gaps.append(
-                "Repeated bullet openings reduce natural tone: "
-                + ", ".join(f"{k} ({v}x)" for k, v in heuristic["repetitive_bullet_starts"].items())
+                "Repeated bullet openings reduce natural tone: " + ", ".join(f"{k} ({v}x)" for k, v in heuristic["repetitive_starts"].items())
             )
-        if heuristic.get("weak_bullets"):
-            wording_gaps.append("Several bullets mention tools and actions but not a concrete outcome.")
-        if heuristic.get("naturalness", {}).get("templated"):
-            wording_gaps.append("Some bullets follow a templated pattern and need more concrete workflow detail.")
-        if heuristic.get("naturalness", {}).get("vague"):
-            wording_gaps.append("Some bullets are too vague and need a clearer object, operational step, or result.")
+        if heuristic["vague_bullets"]:
+            wording_gaps.append("Some bullets need a clearer object, operational step, or result.")
+        if heuristic["overloaded_bullets"]:
+            wording_gaps.append("Some bullets contain too many tools without enough grounding.")
         result["wording_gaps"] = wording_gaps[:10]
 
         skill_gaps = result.get("skill_gaps", [])
-        for skill in heuristic.get("unsupported_skills", [])[:8]:
+        for skill in heuristic["unsupported_core"][:8]:
             skill_gaps.append(f"Core skill not clearly supported by work history: {skill}")
         result["skill_gaps"] = skill_gaps[:12]
 
-        strengths = result.get("strengths", [])
-        dominant = heuristic.get("domain_consistency", {}).get("dominant_domains", [])
-        if dominant:
-            strengths.append("Most consistent experience domains: " + ", ".join(f"{name} ({count})" for name, count in dominant if count > 0))
-        if heuristic.get("naturalness", {}).get("realistic"):
-            strengths.append("Some bullets already sound grounded and operational rather than keyword-driven.")
-        result["strengths"] = strengths[:8]
-
-        top_fixes = result.get("top_fixes", [])
-        if heuristic.get("unsupported_skills"):
-            top_fixes.append("Keep granular tools in Skills if needed, but make sure the core capabilities for the target JD are supported by believable work bullets.")
-        if heuristic.get("generic_phrase_hits"):
-            top_fixes.append("Rewrite summary and top bullets to remove generic phrases and make them sound observed, not claimed.")
-        if heuristic.get("forced_tool_signals") or heuristic.get("naturalness", {}).get("overloaded"):
-            top_fixes.append("Split overloaded bullets. Show what was built, what object or data it operated on, what tool was used, and what result it produced.")
-        if heuristic.get("naturalness", {}).get("vague"):
-            top_fixes.append("Replace vague bullets with lived-in workflow details such as data source, feature table, endpoint, batch job, alert, retry, or latency target.")
-        if job_type.lower() == "fulltime":
-            broad_roles = [r for r, d in heuristic.get("role_scope", {}).items() if d.get("too_broad")]
-            if broad_roles:
-                top_fixes.append("Reduce role breadth in at least one role. Too many unrelated domains in the same role can make the resume feel inflated.")
-        if heuristic.get("metrics_ratio", {}).get("ratio", 0) < 0.25:
-            top_fixes.append("Add more grounded outcomes like throughput, latency, cost reduction, coverage, or user volume.")
-        result["top_fixes"] = top_fixes[:10]
-
+        result["evidence_strength"] = heuristic["evidence"]
+        result["recruiter_confidence"] = recruiter_conf
+        result["score"] = max(0, min(score, 100))
+        result["passed"] = result["score"] >= 85
         return result
 
-    def _build_writer_feedback(self, score_result: dict, heuristic: dict, jd_signals: dict, job_type: str) -> dict:
-        core_ownership_areas = self._infer_core_ownership_areas(jd_signals["explicit_tech"])
-        skills_to_emphasize = [
-            skill for skill in jd_signals["explicit_tech"]
-            if skill not in self.granular_skill_terms and skill not in self.replaceable_terms
-        ][:10]
-        skills_ok_in_skills_only = [
-            skill for skill in jd_signals["explicit_tech"]
-            if skill in self.granular_skill_terms or (job_type.lower() == "fulltime" and skill in self.replaceable_terms)
-        ][:10]
+    def _build_writer_feedback(self, result: dict, heuristic: dict, jd_signals: dict, job_type: str) -> dict:
+        core_areas = self._infer_ownership_areas(jd_signals["explicit"])
+        emphasize = [x for x in jd_signals["explicit"] if x not in self.granular_skill_terms and not (job_type.lower() == "fulltime" and x in self.replaceable_terms)][:10]
+        skills_only = [x for x in jd_signals["explicit"] if x in self.granular_skill_terms or (job_type.lower() == "fulltime" and x in self.replaceable_terms)][:10]
 
         bad_patterns = [
-            "Do not stack 4+ tools in a single bullet unless the workflow truly requires it.",
-            "Do not write summary bullets like a pasted job title or JD mirror.",
-            "Do not use generic claims such as proven track record, strong experience, or demonstrated ability.",
-            "Do not force defense, national security, or clearance wording unless extensively proven.",
-            "Do not force replaceable skills equally. Python can carry more weight than Java in Fulltime mode.",
+            "Do not write summary bullets like pasted JD lines.",
+            "Do not use proven track record, demonstrated ability, deep expertise, or strong experience.",
+            "Do not stack 4 or more tools in a bullet unless the workflow truly requires it.",
+            "Do not claim enterprise architecture or governance ownership beyond what the work history supports.",
+            "Do not force defense, clearance, or national-security positioning unless extensively proven.",
         ]
 
-        rewrite_examples = [
+        rewrites = [
             {
                 "bad": "Worked on SageMaker, Docker, Kubernetes, and MLflow for model deployment.",
                 "better": "Built SageMaker deployment workflows for batch and real-time inference, packaged services in Docker, and tracked model versions in MLflow to support controlled releases."
             },
             {
-                "bad": "Designed and implemented ML pipelines using Python and AWS for business needs.",
-                "better": "Built Python-based training and scoring workflows on AWS to process call transcripts, generate features, and refresh sentiment models used by operations teams."
-            },
-            {
-                "bad": "Used LangChain, OpenAI, and vector databases for RAG.",
-                "better": "Developed a RAG service that retrieved policy content from a vector index and injected grounded context into GPT responses, reducing repetitive support queries."
+                "bad": "Strong experience with machine learning and large language models.",
+                "better": "Built production ML workflows and LLM-based retrieval services used in customer support and document search flows."
             },
             {
                 "bad": "Responsible for model monitoring and retraining.",
-                "better": "Implemented monitoring for prediction drift and response quality, then triggered retraining jobs when model accuracy dropped below service thresholds."
+                "better": "Implemented monitoring for prediction drift and response quality, then triggered retraining jobs when service thresholds were breached."
             },
             {
-                "bad": "Worked with healthcare data and ML models.",
-                "better": "Processed healthcare call transcripts and policy documents to build classification and retrieval workflows supporting agent assistance and document search."
+                "bad": "Used LangChain and OpenAI for RAG.",
+                "better": "Developed a RAG workflow that retrieved policy content from a vector index and injected grounded context into GPT responses for support teams."
+            },
+            {
+                "bad": "Designed enterprise AI architecture strategy and standards.",
+                "better": "Provided solution-level AI design guidance for integration patterns, model lifecycle decisions, and review checkpoints across delivery teams."
             },
         ]
 
         summary_guidance = (
-            "Write summary with about 60% target-role alignment and 40% production systems or business-operational context. "
-            "Avoid metrics, avoid forced domain branding, and prefer concrete identity like ML workflows, inference services, model deployment, monitoring, or retrieval systems."
+            "Write summary with about 60% role and JD alignment and 40% systems, production actions, or business context. "
+            "Keep it metric-free. Do not force domain branding. Prefer grounded identity statements over claim-heavy phrases."
         )
 
+        top_fixes = result.get("top_fixes", [])
+        if heuristic["vague_bullets"]:
+            top_fixes.append("Replace vague bullets with object + action + system + result wording.")
+        if heuristic["overloaded_bullets"]:
+            top_fixes.append("Split overloaded bullets so each one focuses on one workflow and one outcome.")
+        if heuristic["unsupported_core"]:
+            top_fixes.append("Emphasize core JD capabilities in work bullets, while leaving replaceable or granular items in Skills if needed.")
+        if any(v.get("too_broad") for v in heuristic["role_scope"].values()) and job_type.lower() == "fulltime":
+            top_fixes.append("Reduce breadth in at least one role so the profile feels focused rather than inflated.")
+        result["top_fixes"] = top_fixes[:10]
+
+        strengths = result.get("strengths", [])
+        if heuristic["realistic_bullets"]:
+            strengths.append("Some bullets already sound grounded and operational rather than keyword-driven.")
+        result["strengths"] = strengths[:8]
+
         return {
-            "core_ownership_areas": core_ownership_areas,
-            "skills_to_emphasize": skills_to_emphasize,
-            "skills_ok_in_skills_only": skills_ok_in_skills_only,
+            "core_ownership_areas": core_areas,
+            "skills_to_emphasize": emphasize,
+            "skills_ok_in_skills_only": skills_only,
             "bad_patterns_to_avoid": bad_patterns,
-            "rewrite_examples": rewrite_examples,
+            "rewrite_examples": rewrites,
             "summary_guidance": summary_guidance,
         }
 
-    def _infer_core_ownership_areas(self, explicit_tech: List[str]) -> List[str]:
+    def _infer_ownership_areas(self, explicit_terms: List[str]) -> List[str]:
+        terms = set(explicit_terms)
         areas = []
-        tech_set = set(explicit_tech)
-
-        if {"sagemaker", "sagemaker pipelines", "batch inference", "managed endpoints"} & tech_set:
-            areas.append("model deployment and inference workflows")
-        if {"model registry", "experiment tracking", "mlops", "ci/cd", "monitoring", "retraining"} & tech_set:
-            areas.append("model lifecycle management")
-        if {"glue", "athena", "emr", "redshift", "lambda", "feature engineering", "s3"} & tech_set:
+        if {"sagemaker", "model registry", "batch inference", "monitoring", "retraining"} & terms:
+            areas.append("model lifecycle and inference workflows")
+        if {"feature engineering", "aws", "azure"} & terms:
             areas.append("data ingestion and feature engineering pipelines")
-        if {"openai", "llm", "rag", "langchain", "langgraph", "crewai"} & tech_set:
+        if {"openai", "llm", "rag", "langchain", "langgraph", "crewai"} & terms:
             areas.append("llm application and orchestration workflows")
-        if {"docker", "kubernetes", "ecr"} & tech_set:
+        if {"docker", "kubernetes"} & terms:
             areas.append("containerized deployment and runtime operations")
-        if {"iam", "vpc", "encryption"} & tech_set:
-            areas.append("secure cloud deployment controls")
-        if {"documentation", "agile"} & tech_set:
-            areas.append("delivery, collaboration, and implementation documentation")
-
+        if {"governance", "architecture", "reference architecture", "vendor evaluation"} & terms:
+            areas.append("solution architecture, standards, and review guidance")
+        if {"documentation", "agile", "pi planning", "architectural runway"} & terms:
+            areas.append("delivery planning, documentation, and cross-team alignment")
         return areas[:7]
 
     def get_improvement_summary(self, score_result: dict) -> str:
-        parts = []
-        parts.append(f"STRICT ATS SCORE: {score_result.get('score', 0)}/100")
-        parts.append(f"ATS CONFIDENCE: {score_result.get('ats_confidence', 'unknown')}")
-        parts.append(f"RECRUITER CONFIDENCE: {score_result.get('recruiter_confidence', 'unknown')}")
-
+        parts = [
+            f"STRICT ATS SCORE: {score_result.get('score', 0)}/100",
+            f"ATS CONFIDENCE: {score_result.get('ats_confidence', 'unknown')}",
+            f"RECRUITER CONFIDENCE: {score_result.get('recruiter_confidence', 'unknown')}",
+        ]
         if score_result.get("top_fixes"):
             parts.append("TOP FIXES:")
             for i, item in enumerate(score_result["top_fixes"][:8], 1):
                 parts.append(f"  {i}. {item}")
-
-        writer_feedback = score_result.get("writer_feedback", {})
-        if writer_feedback:
+        wf = score_result.get("writer_feedback", {})
+        if wf:
             parts.append("WRITER FEEDBACK:")
-            if writer_feedback.get("core_ownership_areas"):
-                parts.append("  Ownership areas: " + ", ".join(writer_feedback["core_ownership_areas"]))
-            if writer_feedback.get("skills_to_emphasize"):
-                parts.append("  Emphasize: " + ", ".join(writer_feedback["skills_to_emphasize"]))
-            if writer_feedback.get("skills_ok_in_skills_only"):
-                parts.append("  Skills-only is okay for: " + ", ".join(writer_feedback["skills_ok_in_skills_only"]))
-
+            if wf.get("core_ownership_areas"):
+                parts.append("  Ownership areas: " + ", ".join(wf["core_ownership_areas"]))
+            if wf.get("skills_to_emphasize"):
+                parts.append("  Emphasize: " + ", ".join(wf["skills_to_emphasize"]))
+            if wf.get("skills_ok_in_skills_only"):
+                parts.append("  Skills-only is okay for: " + ", ".join(wf["skills_ok_in_skills_only"]))
         return "\n".join(parts)
-
-
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-    load_dotenv()
-
-    scorer = ScorerAgent()
-
-    test_jd = """
-Senior AI Engineer
-Requirements:
-- Python
-- Java
-- LangChain or CrewAI
-- LLMs
-- monitoring
-"""
-
-    test_resume = {
-        "summary": ["AI engineer with 5+ years building LLM workflows."],
-        "skills": {"Programming": "Python, Java", "AI Frameworks": "LangChain, CrewAI"},
-        "bee_data": ["Built LangChain-based RAG workflow and monitored model quality in production."],
-        "allied_health": ["Developed Python APIs for ML inference."],
-        "byjus": ["Trained classification models using scikit-learn."],
-        "cognizant": ["Developed backend services and automation scripts."]
-    }
-
-    result = scorer.score_resume(test_jd, test_resume, job_type="Fulltime")
-    print(json.dumps(result, indent=2))
