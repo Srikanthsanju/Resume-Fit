@@ -155,15 +155,23 @@ Give concrete rewrite suggestions the writer can use in the next iteration.
 Return only JSON.
 """
 
-        response = self.client.chat.completions.create(
+        response = self.client.responses.create(
             model=self.model,
             reasoning={"effort": "high"},
-            text={"format": {"type": "text"}},
-            input=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            input=system_prompt + "\n\n" + user_prompt,
         )
+
+        # GPT-5 returns output differently
+        content = ""
+        if hasattr(response, 'output'):
+            for item in response.output:
+                if hasattr(item, 'content'):
+                    for c in item.content:
+                        if hasattr(c, 'text'):
+                            content = c.text
+                            break
+        if not content and hasattr(response, 'output_text'):
+            content = response.output_text
 
         content = getattr(response, "output_text", "") or ""
         try:
