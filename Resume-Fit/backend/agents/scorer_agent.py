@@ -28,7 +28,7 @@ class ScorerAgent:
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.client = OpenAI(api_key=self.api_key)
         # High-reasoning default. Override with OPENAI_MODEL if needed.
-        self.model = os.getenv("OPENAI_MODEL", "gpt-5-pro")
+        self.model = os.getenv("OPENAI_MODEL", "gpt-5")
 
         config_dir = Path(__file__).parent.parent / "config"
         self.guidelines = ""
@@ -155,7 +155,7 @@ Give concrete rewrite suggestions the writer can use in the next iteration.
 Return only JSON.
 """
 
-        response = self.client.responses.create(
+        response = self.client.chat.completions.create(
             model=self.model,
             reasoning={"effort": "high"},
             text={"format": {"type": "text"}},
