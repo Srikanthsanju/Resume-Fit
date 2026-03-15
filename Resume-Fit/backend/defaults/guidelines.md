@@ -1,396 +1,422 @@
-# Resume Writing Guidelines and Strategy Rules
+# Resume Writing Rulebook
 
-This rulebook exists to maximize three goals at the same time.
-1. ATS match
-2. Recruiter trust
-3. Natural human writing
+This rulebook governs how resumes are written and scored.
 
-If a change improves ATS but makes the resume sound fake, inflated, copied from the JD, or too perfectly matched, do not force it. Preserve realism first and then optimize ATS inside that boundary.
+It supports:
+1. Fulltime resumes
+2. Contract resumes
 
----
+It also supports these main role types:
+1. AI Engineer
+2. Data Scientist
+3. Software Engineer
 
-## 1. Core Principle
+The system must optimize for:
+- ATS match
+- recruiter readability
+- realism and credibility
+- role alignment
+- job type alignment
 
-The resume must sound like a real engineer or architect describing work they actually did.
+If a change improves ATS but makes the resume sound fake, inflated, or obviously AI-generated, do not follow it blindly. Preserve realism first, then maximize ATS within that boundary.
+
+--------------------------------------------------
+SECTION 1. GLOBAL WRITING RULES
+--------------------------------------------------
+
+1.1 Natural engineering writing
+
+Prefer direct, grounded wording.
 
 Prefer:
-- concrete systems
-- real objects and datasets
-- technical decisions
-- measurable outcomes
-- ownership
-- selective emphasis
+- built
+- designed
+- implemented
+- developed
+- deployed
+- integrated
+- monitored
+- optimized
+- evaluated
+- reviewed
+- guided
+- automated
 
-Avoid:
-- keyword stuffing
-- broad claims with no evidence
-- defensive domain branding
-- overclaiming architect or governance authority
-- summary lines that read like pasted job titles
+Avoid generic claims such as:
+- proven track record
+- demonstrated ability
+- deep expertise
+- strong experience
+- hands-on experience
+- cutting-edge
+- best-in-class
+- world-class
+- delivering business value
 
----
+1.2 Bullet quality rule
 
-## 2. Job Type Modes
+A strong bullet usually shows:
+object or data + action + system or tool + result
 
-The writer and scorer must always respect `job_type`.
+Examples:
+- Built a RAG workflow that retrieved policy content from a vector index and injected grounded context into GPT responses, reducing repetitive support queries.
+- Implemented monitoring for prediction drift and response quality, then triggered retraining jobs when service thresholds were breached.
 
-### Fulltime mode
-Use tighter, more selective, more believable writing.
-- optimize for recruiter trust first and ATS second
-- do not force every replaceable skill from the JD into experience bullets
-- some granular or adjacent skills may stay only in Skills
-- keep the profile stable, senior, and credible
-- overall positioning should align to 5+ years unless resume details explicitly say otherwise
+Weak bullets:
+- Worked on AI solutions using Python and AWS.
+- Responsible for model monitoring.
+- Strong experience with large language models.
 
-### Contract mode
-Use broader, more implementation-heavy, more checklist-friendly writing.
-- optimize for ATS and delivery depth together
-- broader keyword coverage is acceptable if still believable
-- more direct JD phrase mirroring is acceptable
-- deeper mechanics and lower-level technical detail are acceptable
-- overall positioning can align to 7+ years if resume details and date rules support it
+1.3 Communication and grammar rules
 
----
+- Keep language simple, direct, and readable
+- Use only periods and commas
+- Do not use semicolons
+- Do not use a comma before "and"
+- Avoid stacked noun phrases
+- Avoid whitepaper-like wording
+- Do not sound overly literary or robotic
+- In most bullets, keep one main action
+- In most bullets, keep one clear result
+- Avoid repeating the same phrase root inside one section unless clearly necessary
 
-## 3. Date Rules by Job Type
+1.4 Metrics rule
 
-These are hard rules and should not be treated as scoring errors.
+Metrics should appear naturally.
 
-### Fulltime
+Useful metrics include:
+- latency
+- throughput
+- accuracy
+- user volume
+- request volume
+- cost reduction
+- automation %
+- processing time
+- manual effort reduction
+
+Do not force numbers into every bullet.
+
+1.5 Replaceable skills rule
+
+Not every listed skill must be equally emphasized in work bullets.
+
+It is acceptable to:
+- keep some tools only in Skills
+- emphasize only the strongest or most relevant substitute in experience
+- avoid forcing weak or replaceable tools into bullets
+
+Examples:
+- Python may carry the main programming emphasis without forcing Java
+- LangChain may carry the agentic workflow emphasis without forcing CrewAI everywhere
+- LoRA or QLoRA can support LLM optimization language without forcing every adjacent fine-tuning term
+
+--------------------------------------------------
+SECTION 2. ROLE TYPE RULES
+--------------------------------------------------
+
+2.1 AI Engineer
+
+Focus on:
+- LLM systems
+- RAG
+- agentic workflows
+- orchestration
+- APIs
+- model deployment
+- monitoring
+- vector retrieval
+- evaluation frameworks
+- cloud deployment
+- platform components
+- secure production systems
+
+2.2 Data Scientist
+
+Focus on:
+- experimentation
+- feature engineering
+- model training
+- model evaluation
+- statistical rigor
+- business translation
+- predictive modeling
+- data quality
+- analysis
+- stakeholder reporting
+
+2.3 Software Engineer
+
+Focus on:
+- backend systems
+- APIs
+- microservices
+- event-driven systems
+- integration layers
+- platform engineering
+- reliability
+- scalability
+- automation
+- production architecture
+- cloud-native services
+
+2.4 Unknown role type fallback
+
+If role type is not one of the supported types:
+- do not force AI-specific language
+- infer emphasis from the JD
+- stay closer to general software, data, or AI systems wording
+- avoid role-specific jargon unless the JD clearly supports it
+
+--------------------------------------------------
+SECTION 3. JOB TYPE RULES
+--------------------------------------------------
+
+3.1 Fulltime mode
+
+Goals:
+- focused
+- recruiter-friendly
+- concise
+- selective
+- realistic
+- approximately 2 pages
+
+Experience positioning:
+- 5+ years
+
+Date rules:
 - Cognizant: Jun 2020 - Oct 2021
 - Amrita University: Jun 2016 - May 2020
-- overall experience positioning: 5+ years
 
-### Contract
+Bullet count guidance:
+- Summary: 3 to 4 bullets
+- Experience 1: 7 bullets
+- Experience 2: 5 to 6 bullets
+- Experience 3: 5 to 6 bullets
+- Experience 4: use only when relevant and usually concise
+
+Fulltime writing rules:
+- Do not force every optional or replaceable JD item into bullets
+- Prefer realism over maximum keyword density
+- Skills can carry some adjacent or replaceable tools
+- Minimize repetition
+- Summary should feel selective and mature
+- Do not overstate technical authority unless clearly supported
+- Do not force defense, clearance, or enterprise authority language unless strongly proven
+
+3.2 Contract mode
+
+Goals:
+- vendor-friendly
+- keyword-dense
+- more explicit
+- more detailed
+- broader in technical coverage
+- usually 3 to 4 pages, and sometimes 4 to 5 if vendor submission needs that depth
+
+Experience positioning:
+- 7+ years
+
+Date rules:
 - Cognizant: Jun 2018 - Oct 2021
 - Amrita University: Jun 2014 - May 2018
-- overall experience positioning: 7+ years
 
-Scorer must not penalize the resume for these date choices if they align with the selected job type.
+Bullet count guidance:
+- Summary: 6 to 10 bullets
+- Experience 1: 12 to 18 bullets
+- Experience 2: 10 to 14 bullets
+- Experience 3: 8 to 12 bullets
+- Experience 4: 6 to 10 bullets
 
----
+Contract writing rules:
+- More repeated reinforcement of core technical skills is acceptable
+- More in-depth architecture, platform, deployment, observability, and framework details are acceptable
+- More direct JD mirroring is acceptable if still believable
+- Resume can include more specific tools and cloud sub-services
+- Long bullets are acceptable when still readable
+- Strategic repetition is acceptable if it increases keyword coverage and still sounds plausible
+- More low-level system details are acceptable
+- More platform-specific language is acceptable
+- Vendor recruiter preferences matter more than recruiter concision
 
-## 4. Summary Rules
+3.3 Scoring tolerance by job type
 
-The Summary should be about:
-- 60% target role and core JD alignment
-- 40% systems, business actions, production context, or scope
+Fulltime scoring should be stricter on:
+- realism
+- inflated wording
+- over-broad claims
+- tool stuffing
 
-The Summary must:
-- describe profile, scope, and technical identity
-- stay metric-free
-- sound human and selective
-- avoid generic claims
+Contract scoring should be more tolerant of:
+- longer bullets
+- repeated skills
+- deeper technical detail
+- broader keyword coverage
+- mild JD mirroring
+- more explicit technology mentions
+- more specific vendor-style skill density
 
-Do not use in Summary unless extensively proven:
+The scorer must not penalize years-of-experience differences when they are consistent with the chosen job type.
+
+--------------------------------------------------
+SECTION 4. RESUME EXPANSION ALGORITHM
+--------------------------------------------------
+
+This algorithm is for Contract resumes and vendor-friendly submissions.
+
+Goal:
+Expand a concise resume into a denser 3 to 4 page resume without hallucinating fake experience.
+
+Step 1. Identify core ownership areas
+Extract 5 to 8 ownership areas from the JD.
+
+Examples:
+- orchestration design
+- model deployment
+- API integration
+- vector retrieval
+- CI/CD
+- observability
+- governance
+- platform design
+
+Step 2. Expand each ownership area into multiple bullet angles
+
+For each ownership area, generate bullets from different angles:
+- architecture decision
+- implementation detail
+- platform or runtime behavior
+- monitoring and operations
+- integration pattern
+- stakeholder or delivery impact
+
+Step 3. Split compressed bullets
+
+If one bullet contains too many ideas, split it into 2 to 3 bullets.
+
+Example:
+
+Original:
+- Built LangGraph multi-agent workflow deployed on AWS.
+
+Expanded:
+- Designed LangGraph-based multi-agent orchestration workflow coordinating task-specific agents for document retrieval and response generation.
+- Integrated the workflow with AWS-hosted inference services and runtime controls to support scalable production execution.
+- Added operational monitoring and quality checks to track agent latency, response consistency, and failure patterns.
+
+Step 4. Expand tools into workflows
+
+Do not list tools only.
+Explain what each tool did in the system.
+
+Bad:
+- Used Bedrock, Lambda, CloudWatch, and EKS.
+
+Better:
+- Deployed runtime components on Lambda for low-latency agent execution and used CloudWatch dashboards to track invocation behavior and response latency.
+- Managed EKS-based inference services for workloads requiring containerized scaling and controlled rollout behavior.
+
+Step 5. Expand data and object detail
+
+Name the real objects and data that flowed through the system:
+- documents
+- transcripts
+- policies
+- feature tables
+- model artifacts
+- vector indexes
+- request payloads
+- connectors
+- APIs
+- extracted fields
+
+Step 6. Expand operational detail
+
+For contract mode, add:
+- latency handling
+- scaling
+- retries
+- monitoring
+- logging
+- deployment flows
+- model versioning
+- evaluation checkpoints
+- security controls
+when these are believable.
+
+Step 7. Allow controlled repetition
+
+In Contract mode, repeating core terms is acceptable when useful for ATS.
+
+Examples:
+- RAG
+- embeddings
+- vector database
+- orchestration
+- AWS
+- Azure
+- CI/CD
+- monitoring
+- APIs
+
+Step 8. Cap hallucination risk
+
+Do not invent new domains, titles, or responsibilities.
+Expand only what is consistent with:
+- JD
+- known experience
+- resume_details input
+- plausible system behavior
+
+--------------------------------------------------
+SECTION 5. SUMMARY RULES
+--------------------------------------------------
+
+The Summary should describe:
+- expertise
+- scope
+- technical domain
+- type of systems worked on
+- level of ownership
+
+Do not include quantified achievements in Summary.
+
+Summary balance:
+- about 60% target role or JD alignment
+- about 40% systems, production actions, or business-operational context
+
+Avoid in Summary unless extensively proven:
 - national security
 - defense domain
 - clearance
 - public trust
 - fedramp
-- enterprise architecture ownership at full strategy level
-
-Avoid phrases such as:
-- proven track record
-- demonstrated ability
-- deep expertise
-- strong experience with
-- hands-on experience with
-
-Better style:
-- AI Engineer with 5+ years building production ML workflows, retrieval systems, and API-driven AI services across healthcare and enterprise data environments.
-
-Summary length is controlled by this rulebook. Scorer must not penalize summary length when it follows the chosen mode.
-
----
-
-## 5. Bullet Design Rules
-
-### Preferred bullet pattern
-At least half of the bullets should roughly follow this pattern:
-object or data + action + system or tool + result
-
-Examples:
-- Processed call transcripts and policy documents to generate features used by classification and retrieval models across support workflows.
-- Built SageMaker deployment workflows for batch and real-time inference, then tracked model versions to support controlled releases.
-
-### Structure mix
-Use this mix across experience bullets:
-- 50%: ownership or problem + system or tool + result
-- 30%: action + system or tool
-- 20%: design judgment, mentoring, review, architecture, stakeholder alignment, or process ownership
-
-### Density limits
-- max 2 major tools in most bullets
-- max 1 to 2 actions in most bullets
-- max 1 main outcome in most bullets
-- max 3 uses of “and” in a bullet
-
-Do not produce bullets that read like:
-- tool list + buzzword + outcome
-- JD phrase copy + no concrete object
-- architecture claim + no evidence
-
----
-
-## 6. Communication and Grammar Rules
-
-The resume should sound direct, controlled, and readable.
-
-### Use
-- simple direct verbs
-- normal punctuation
-- concrete nouns
-- short to medium sentences
-- natural variation in rhythm
-
-### Avoid
-- semicolons
-- stacked noun phrases
-- over-polished corporate language
-- repeated bullet openings like Built, Built, Built, Built across a section
-- awkward filler such as leveraging, robust, cutting-edge, best-in-class
-- excessive commas before and
-
-### Strong writing habits
-Prefer:
-- built
-- designed
-- deployed
-- implemented
-- trained
-- monitored
-- packaged
-- evaluated
-- orchestrated
-- documented
-- translated
-- guided
-- reviewed
-
-Use periods and commas only. Do not use semicolons.
-Do not use a comma before “and”.
-Grammar should be clean but not overly polished to the point of sounding machine-generated.
-
----
-
-## 7. Role Framing Rules
-
-The same background can be framed differently depending on target role, but history must stay believable.
-
-### AI Engineer
-Emphasize:
-- LLM systems
-- RAG
-- agentic workflows
-- inference pipelines
-- model evaluation
-- monitoring
-- deployment
-- Python-first services
-- MLOps and platform workflows
-
-### Data / ML Engineer
-Emphasize:
-- data pipelines
-- feature engineering
-- training workflows
-- scoring pipelines
-- monitoring and retraining
-- model lifecycle support
-
-### Architect roles
-Be careful.
-Do not jump from implementation background straight to enterprise ownership language unless the work bullets clearly support it.
-
-For architect-style JDs, prefer this progression:
-- solution design ownership
-- platform decision support
-- integration patterns
-- review responsibilities
-- standards contribution
-- technical mentoring
-- roadmap influence
-
-Use enterprise architecture language only when grounded by artifacts or decisions such as:
-- review authority
-- standards contribution
-- reference designs
-- platform blueprint decisions
-- vendor evaluation with fit or cost tradeoffs
-- cross-team planning guidance
-
-Avoid turning every architect JD into a fully strategic enterprise architect profile if the evidence is closer to solution architecture.
-
----
-
-## 8. Skills Section Rules
-
-The Skills section should reflect both ATS and realism.
-
-### Ordering
-Order skill categories based on JD priority, not a fixed template.
-
-### Replaceable skills
-Not every replaceable or adjacent skill must appear in work bullets.
-This is especially important for Fulltime mode.
-
-Examples:
-- Python can naturally carry more weight than Java
-- LangChain can naturally carry more weight than CrewAI
-- LoRA or QLoRA can be enough to support model optimization language
-- some cloud sub-services can stay only in Skills
-
-### Granular skills
-It is acceptable for granular tools to remain only in Skills, especially in Fulltime mode.
-Examples:
-- Glue
-- ECR
-- IAM
-- Athena
-- Redshift
-- Step Functions
-- Bedrock
-
-Scorer should not heavily penalize these if the core workflow is evidenced elsewhere.
-
-### Skills categories should sound technical and senior
-Prefer categories such as:
-- Programming
-- AI Frameworks
-- Cloud Platforms
-- Model Operations
-- Data Infrastructure
-- APIs and Backend Services
-- Vector and Retrieval Systems
-- Databases
-- Governance and Security
-
-Avoid weak categories such as:
-- Other
-- Applications
-- Monitoring
-- Version Control
-- Statistical Analysis
-
----
-
-## 9. ATS Keyword Rules
-
-Use exact or near-exact JD phrases when natural.
-
-Priority of placement:
-1. Skills section
-2. Summary only if it stays natural
-3. First 3 bullets of latest relevant role
-4. Supporting bullets in older roles
-
-### Fulltime ATS rule
-- do not force every optional or replaceable skill into bullets
-- selective emphasis is allowed
-- stronger natural substitutes are preferred over forced duplication
-
-### Contract ATS rule
-- broader coverage is acceptable
-- more checklist alignment is acceptable
-- still must remain believable
-
-Scorer must not deduct points solely because a replaceable JD term appears in Skills and not in experience, if the stronger substitute is clearly evidenced.
-
----
-
-## 10. Metrics Rules
-
-Metrics should appear naturally in Experience, not in Summary.
-
-Good metric types:
-- user volume
-- throughput
-- latency
-- accuracy
-- automation
-- time saved
-- cost reduction
-- processing scale
-
-Do not force metrics into every bullet.
-But enough bullets should include grounded scale or outcome for credibility.
-
----
-
-## 11. Domain and Security Wording Rules
-
-Do not force domain branding just because the JD is in that domain.
-
-Examples of wording to avoid unless extensively proven:
-- supporting national security activities
-- defense domain leadership
-- security clearance eligible
-- maintaining clearance eligibility
-- public trust ready
-
-If the JD requires clearance and the candidate does not clearly have it, do not invent workaround phrasing in Summary.
-At most, use secure or compliance-heavy wording only if it is grounded in prior work.
-
----
-
-## 12. Scoring Exclusion Rules
-
-The scorer must NOT penalize the resume for the following when they follow this rulebook and resume details:
-- summary length choice by job type
-- Fulltime vs Contract date differences
-- selective emphasis of Python over Java in Fulltime mode
-- selective emphasis of LangChain over CrewAI in Fulltime mode
-- keeping granular tools in Skills without repeating them in bullets
-- not proving every optional JD skill in work history
-
-The scorer SHOULD penalize:
-- unsupported core capabilities
-- inflated architecture ownership
-- vague or generic summary language
-- overloaded bullets
-- unrealistic domain claims
-- enterprise or governance claims without grounding
-
----
-
-## 13. Writer and Scorer Alignment Rules
-
-The scorer feedback takes precedence over generic writing habits when it is specific and resume-aware.
-
-The writer must use scorer feedback to:
-- rewrite weak bullets
-- remove forced wording
-- lower overclaiming
-- improve object + action + system + result structure
-- decide which skills to emphasize in bullets vs Skills only
-
-The scorer must provide:
-- specific weak areas
-- concrete rewrite examples
-- skills to emphasize
-- skills okay in Skills only
-- summary guidance
-- warnings about overclaiming
-
-If guidelines and scorer feedback appear to conflict, resolve in this order:
-1. realism
-2. scorer’s resume-specific guidance
-3. ATS coverage
-4. generic template preferences
-
----
-
-## 14. Final Realism Test
-
-Before finalizing a resume, verify:
-1. Does the summary sound human and selective
-2. Are the first bullets high-signal and believable
-3. Do bullets vary in structure and rhythm
-4. Are weak generic claims removed
-5. Are replaceable skills handled selectively in Fulltime mode
-6. Are broader checklist items handled believably in Contract mode
-7. Are architect claims grounded by actual design, review, or standards evidence
-8. Would a hiring manager believe this person actually did the work described
-
-If any answer is no, revise before finalizing.
+- enterprise AI authority claims
+- technical thought leader claims
+
+--------------------------------------------------
+SECTION 6. SCORING EXCLUSIONS
+--------------------------------------------------
+
+The scorer must not penalize the resume for:
+- summary length differences that follow the chosen job type
+- experience year differences that follow the chosen job type
+- date differences that follow the chosen job type
+- selective emphasis of replaceable skills
+- keeping granular tools mainly in Skills
+- vendor-style longer bullets in Contract mode
+- moderate repetition in Contract mode when it improves ATS and remains believable
+
+--------------------------------------------------
+SECTION 7. FINAL CHECK
+--------------------------------------------------
+
+Before finalizing:
+1. Does it sound like a real engineer and not an AI keyword sheet
+2. Does the chosen job type clearly shape depth and density
+3. Does the chosen role type clearly shape emphasis
+4. Are optional and replaceable skills handled naturally
+5. Are the bullets readable and grounded
+6. For Contract mode, does the resume show enough vendor-level technical density
+7. For Fulltime mode, does the resume stay focused and selective

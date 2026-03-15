@@ -327,7 +327,17 @@ class ResumeGenerator:
             resp_run.font.name = self.body_font
             resp_run.font.size = Pt(10)
 
-        for bullet in resume_content.get(job["key"], []):
+        # Support both old and new key formats
+        key = job["key"]
+        key_mapping = {
+            "bee_data": "experience_1",
+            "allied_health": "experience_2", 
+            "byjus": "experience_3",
+            "cognizant": "experience_4"
+        }
+        bullets = resume_content.get(key, []) or resume_content.get(key_mapping.get(key, key), [])
+        
+        for bullet in bullets:
             self._add_bullet_point(doc, bullet)
 
         if mode == "Contract":
