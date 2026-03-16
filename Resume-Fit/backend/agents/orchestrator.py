@@ -51,7 +51,7 @@ class ResumeOrchestrator:
         
         # Step 1: Identify ownership areas
         print("\n📋 Identifying ownership areas from JD...")
-        ownership_areas = self.writer.identify_ownership_areas(job_description)
+        ownership_areas = self.writer._identify_ownership_areas(job_description)
         print(f"   Found {len(ownership_areas)} areas: {ownership_areas[:3]}...")
         
         # Initialize
