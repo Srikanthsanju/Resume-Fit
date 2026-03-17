@@ -46,11 +46,11 @@ class WriterAgent:
             return """
 MANDATORY BULLET COUNTS FOR CONTRACT MODE - YOU MUST FOLLOW THESE EXACTLY:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• summary: EXACTLY 6 to 10 bullets (aim for 8)
-• experience_1: EXACTLY 12 to 18 bullets (aim for 15)
-• experience_2: EXACTLY 10 to 14 bullets (aim for 12)
-• experience_3: EXACTLY 8 to 12 bullets (aim for 10)
-• experience_4: EXACTLY 6 to 10 bullets (aim for 8)
+• summary: EXACTLY 8 to 10 bullets (aim for 10)
+• experience_1: EXACTLY 14 to 18 bullets (aim for 15)
+• experience_2: EXACTLY 12 to 14 bullets (aim for 12)
+• experience_3: EXACTLY 10 to 12 bullets (aim for 10)
+• experience_4: EXACTLY 10 to 11 bullets (aim for 8)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CONTRACT MODE EXPANSION RULES:
@@ -68,12 +68,12 @@ CONTRACT MODE REQUIRES 2-3x MORE BULLETS than Fulltime.
             return """
 MANDATORY BULLET COUNTS FOR FULLTIME MODE - YOU MUST FOLLOW THESE EXACTLY:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• summary: EXACTLY 3 to 4 bullets
-• experience_1: EXACTLY 7 bullets
-• experience_2: EXACTLY 5 to 6 bullets
-• experience_3: EXACTLY 5 to 6 bullets
-• experience_4: EXACTLY 3 to 5 bullets (use only when relevant)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• summary: EXACTLY 4 to 6 bullets
+• experience_1: EXACTLY 9 bullets
+• experience_2: EXACTLY 8 to 10 bullets
+• experience_3: EXACTLY 7 to 10 bullets
+• experience_4: EXACTLY 7 to 10 bullets (use only when relevant)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 FULLTIME MODE RULES:
 - Keep resume focused, selective, and realistic
@@ -143,7 +143,7 @@ Return ONLY valid JSON with these exact keys:
 
 FINAL CHECKLIST BEFORE RESPONDING:
 1. Have I generated the CORRECT NUMBER of bullets for {job_type} mode?
-2. For Contract: Did I generate 12-18 bullets for experience_1? 10-14 for experience_2?
+2. For Contract: Did I generate 14-18 bullets for experience_1? 12-14 for experience_2? 10-12 for experience_3? 6-10 for experience_4? 8-10 for summary?
 3. For Fulltime: Did I keep it to ~7 bullets for experience_1?
 4. Are bullets grounded with object + action + system + result?
 5. Did I avoid generic phrases like "strong experience" and "proven track record"?
@@ -161,7 +161,7 @@ JOB DESCRIPTION
 """
         user_prompt += f"""
 Generate the resume now for {job_type.upper()} MODE.
-Remember: {"Contract mode needs 12-18 bullets for experience_1, 10-14 for experience_2, etc." if job_type.lower() == "contract" else "Fulltime mode needs ~7 bullets for experience_1."}
+Remember: {"Contract mode needs 14-18 bullets for experience_1, 12-14 for experience_2, etc." if job_type.lower() == "contract" else "Fulltime mode needs ~8 bullets for experience_1."}
 Return only valid JSON.
 """
 
@@ -294,10 +294,11 @@ JOB DESCRIPTION
             lines += [
                 "",
                 "CONTRACT MODE REMINDERS:",
-                "- Generate 12-18 bullets for experience_1 (NOT 5-7!)",
-                "- Generate 10-14 bullets for experience_2",
-                "- Generate 8-12 bullets for experience_3",
-                "- Generate 6-10 bullets for experience_4",
+                "- Generate 14-18 bullets for experience_1 (NOT 5-7!)",
+                "- Generate 12-14 bullets for experience_2",
+                "- Generate 11-12 bullets for experience_3",
+                "- Generate 10-11 bullets for experience_4",
+                "- Generate 9-11 bullets for summary",
                 "- Apply the Resume Expansion Algorithm from the rulebook.",
                 "- Expand coverage, add architecture and operations detail.",
                 "- Allow strategic repetition for vendor ATS.",
@@ -308,7 +309,7 @@ JOB DESCRIPTION
                 "FULLTIME MODE REMINDERS:",
                 "- Keep the resume selective, tighter, and more realistic.",
                 "- Do not force every optional or replaceable JD tool into work bullets.",
-                "- Generate ~7 bullets for experience_1, 5-6 for experience_2/3.",
+                "- Generate ~7 bullets for experience_1, 5-6 bullets for experience_2/3, 4-6 bullets for summary, 5-6 bullets for experience_4",
             ]
         return "\n".join(lines)
 
