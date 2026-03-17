@@ -46,7 +46,7 @@ class WriterAgent:
             return """
 MANDATORY BULLET COUNTS FOR CONTRACT MODE - YOU MUST FOLLOW THESE EXACTLY:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• summary: EXACTLY 6 to 10 bullets (aim for 8)
+• summary: EXACTLY 8 to 10 bullets (aim for 10)
 • experience_1: EXACTLY 12 to 18 bullets (aim for 15)
 • experience_2: EXACTLY 10 to 14 bullets (aim for 12)
 • experience_3: EXACTLY 8 to 12 bullets (aim for 10)
@@ -298,6 +298,7 @@ JOB DESCRIPTION
                 "- Generate 10-14 bullets for experience_2",
                 "- Generate 8-12 bullets for experience_3",
                 "- Generate 6-10 bullets for experience_4",
+                "- Generate 8-10 bullets for summary",
                 "- Apply the Resume Expansion Algorithm from the rulebook.",
                 "- Expand coverage, add architecture and operations detail.",
                 "- Allow strategic repetition for vendor ATS.",
@@ -308,7 +309,7 @@ JOB DESCRIPTION
                 "FULLTIME MODE REMINDERS:",
                 "- Keep the resume selective, tighter, and more realistic.",
                 "- Do not force every optional or replaceable JD tool into work bullets.",
-                "- Generate ~7 bullets for experience_1, 5-6 for experience_2/3.",
+                "- Generate ~7 bullets for experience_1, 5-6 for experience_2/3, 4-6 for summary, 5-6 for experience_4",
             ]
         return "\n".join(lines)
 
