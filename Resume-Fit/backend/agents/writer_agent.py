@@ -5,7 +5,7 @@ Rulebook-driven writer agent
 - Reads job_type and role_type from caller
 - Relies on guidelines for point counts and expansion behavior
 - Consumes scorer feedback strongly
-- Avoids hardcoding personal section names in the prompt
+- Enforces explicit bullet counts per job type
 """
 
 from __future__ import annotations
@@ -40,6 +40,48 @@ class WriterAgent:
         if gp.exists():
             self.guidelines = gp.read_text(encoding="utf-8")
 
+    def _get_bullet_count_instructions(self, job_type: str) -> str:
+        """Return explicit bullet count requirements based on job type."""
+        if job_type.lower() == "contract":
+            return """
+MANDATORY BULLET COUNTS FOR CONTRACT MODE - YOU MUST FOLLOW THESE EXACTLY:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• summary: EXACTLY 6 to 10 bullets (aim for 8)
+• experience_1: EXACTLY 12 to 18 bullets (aim for 15)
+• experience_2: EXACTLY 10 to 14 bullets (aim for 12)
+• experience_3: EXACTLY 8 to 12 bullets (aim for 10)
+• experience_4: EXACTLY 6 to 10 bullets (aim for 8)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CONTRACT MODE EXPANSION RULES:
+- This is a vendor-friendly resume requiring HIGH keyword density
+- Generate MORE bullets by splitting complex ideas into multiple grounded bullets
+- Each ownership area should have 2-3 bullets covering different angles
+- Allow strategic repetition of core skills (RAG, LLM, AWS, orchestration, etc.)
+- Longer bullets are acceptable when readable
+- More platform-specific and architecture details are expected
+
+DO NOT generate only 5-7 bullets per experience - that is FULLTIME mode.
+CONTRACT MODE REQUIRES 2-3x MORE BULLETS than Fulltime.
+"""
+        else:  # Fulltime
+            return """
+MANDATORY BULLET COUNTS FOR FULLTIME MODE - YOU MUST FOLLOW THESE EXACTLY:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• summary: EXACTLY 3 to 4 bullets
+• experience_1: EXACTLY 7 bullets
+• experience_2: EXACTLY 5 to 6 bullets
+• experience_3: EXACTLY 5 to 6 bullets
+• experience_4: EXACTLY 3 to 5 bullets (use only when relevant)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FULLTIME MODE RULES:
+- Keep resume focused, selective, and realistic
+- Prefer realism over maximum keyword density
+- Do not force every JD skill into bullets
+- Summary should feel selective and mature
+"""
+
     def generate_resume(
         self,
         job_description: str,
@@ -53,6 +95,7 @@ class WriterAgent:
 
         examples_block = self._examples_block(scorer_feedback["writer_feedback"])
         scorer_block = self._scorer_block(scorer_feedback, job_type)
+        bullet_count_instructions = self._get_bullet_count_instructions(job_type)
 
         system_prompt = f"""
 You are an expert resume writer.
@@ -75,14 +118,11 @@ CONTEXT
 - Job type: {job_type}
 - Core ownership areas: {json.dumps(ownership_areas)}
 
+{bullet_count_instructions}
+
 ROLE TYPE RULE
 Follow the role-specific emphasis from the rulebook.
 Do not force AI Engineer language if the role type is Data Scientist or Software Engineer.
-
-JOB TYPE RULE
-Follow the job-type rules from the rulebook exactly.
-Contract mode must expand density and depth.
-Fulltime mode must stay more selective and concise.
 
 {examples_block}
 
@@ -101,15 +141,12 @@ Return ONLY valid JSON with these exact keys:
   "experience_4": ["bullet 1", "bullet 2", "..."]
 }}
 
-CRITICAL RULES
-- Use the rulebook point counts for the chosen job type
-- Contract mode must apply the Resume Expansion Algorithm from the rulebook
-- Fulltime mode must stay selective
-- Do not force every optional or replaceable JD skill into bullets
-- Keep some granular or replaceable skills mainly in Skills if the scorer allows it
-- Prefer bullets with object or data + action + system + result
-- Avoid generic phrases like strong experience, proven track record, demonstrated ability, and deep expertise
-- Do not include metrics in the summary
+FINAL CHECKLIST BEFORE RESPONDING:
+1. Have I generated the CORRECT NUMBER of bullets for {job_type} mode?
+2. For Contract: Did I generate 12-18 bullets for experience_1? 10-14 for experience_2?
+3. For Fulltime: Did I keep it to ~7 bullets for experience_1?
+4. Are bullets grounded with object + action + system + result?
+5. Did I avoid generic phrases like "strong experience" and "proven track record"?
 """
 
         user_prompt = f"""
@@ -122,11 +159,15 @@ JOB DESCRIPTION
 {feedback}
 
 """
-        user_prompt += "Generate the resume now. Return only valid JSON."
+        user_prompt += f"""
+Generate the resume now for {job_type.upper()} MODE.
+Remember: {"Contract mode needs 12-18 bullets for experience_1, 10-14 for experience_2, etc." if job_type.lower() == "contract" else "Fulltime mode needs ~7 bullets for experience_1."}
+Return only valid JSON.
+"""
 
         response = self.client.messages.create(
             model=self.model,
-            max_tokens=9000,
+            max_tokens=12000,  # Increased for Contract mode
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
@@ -251,13 +292,23 @@ JOB DESCRIPTION
         ]
         if job_type.lower() == "contract":
             lines += [
-                "- Contract mode: apply the Resume Expansion Algorithm from the rulebook.",
-                "- Contract mode: expand coverage, add architecture and operations detail, and allow strategic repetition for vendor ATS.",
+                "",
+                "CONTRACT MODE REMINDERS:",
+                "- Generate 12-18 bullets for experience_1 (NOT 5-7!)",
+                "- Generate 10-14 bullets for experience_2",
+                "- Generate 8-12 bullets for experience_3",
+                "- Generate 6-10 bullets for experience_4",
+                "- Apply the Resume Expansion Algorithm from the rulebook.",
+                "- Expand coverage, add architecture and operations detail.",
+                "- Allow strategic repetition for vendor ATS.",
             ]
         else:
             lines += [
-                "- Fulltime mode: keep the resume selective, tighter, and more realistic.",
-                "- Fulltime mode: do not force every optional or replaceable JD tool into work bullets.",
+                "",
+                "FULLTIME MODE REMINDERS:",
+                "- Keep the resume selective, tighter, and more realistic.",
+                "- Do not force every optional or replaceable JD tool into work bullets.",
+                "- Generate ~7 bullets for experience_1, 5-6 for experience_2/3.",
             ]
         return "\n".join(lines)
 

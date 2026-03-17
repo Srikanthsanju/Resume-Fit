@@ -1,330 +1,438 @@
-"""
-Rulebook-driven writer agent
-
-- Uses Anthropic for prose generation
-- Reads job_type and role_type from caller
-- Relies on guidelines for point counts and expansion behavior
-- Consumes scorer feedback strongly
-- Enforces explicit bullet counts per job type
-"""
-
-from __future__ import annotations
-
-import json
-import os
-import re
+from docx import Document
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+import os
+import subprocess
 
-import anthropic
 
+class ResumeGenerator:
+    def __init__(self, output_dir: str = None):
+        self.output_dir = Path(output_dir or os.getenv("OUTPUT_DIR", "./output"))
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.body_font = "Times New Roman"
+        self.name_font = "Times New Roman"
+        self.body_size = 10
+        self.header_size = 11
 
-class WriterAgent:
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY is missing.")
-        self.client = anthropic.Anthropic(api_key=self.api_key)
-        self.model = model or os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
+        # Position grid
+        self.section_left = 0.00
+        self.content_left = 0.04
+        self.bullet_left = 0.08
+        self.bullet_text_left = 0.26
 
-        config_dir = Path(__file__).parent.parent / "config"
-        defaults_dir = Path(__file__).parent.parent / "defaults"
-
-        self.resume_details = ""
-        rp = config_dir / "resume_details.md"
-        if rp.exists():
-            self.resume_details = rp.read_text(encoding="utf-8")
-
-        self.guidelines = ""
-        gp = defaults_dir / "guidelines.md"
-        if gp.exists():
-            self.guidelines = gp.read_text(encoding="utf-8")
-
-    def _get_bullet_count_instructions(self, job_type: str) -> str:
-        """Return explicit bullet count requirements based on job type."""
-        if job_type.lower() == "contract":
-            return """
-MANDATORY BULLET COUNTS FOR CONTRACT MODE - YOU MUST FOLLOW THESE EXACTLY:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• summary: EXACTLY 6 to 10 bullets (aim for 8)
-• experience_1: EXACTLY 12 to 18 bullets (aim for 15)
-• experience_2: EXACTLY 10 to 14 bullets (aim for 12)
-• experience_3: EXACTLY 8 to 12 bullets (aim for 10)
-• experience_4: EXACTLY 6 to 10 bullets (aim for 8)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-CONTRACT MODE EXPANSION RULES:
-- This is a vendor-friendly resume requiring HIGH keyword density
-- Generate MORE bullets by splitting complex ideas into multiple grounded bullets
-- Each ownership area should have 2-3 bullets covering different angles
-- Allow strategic repetition of core skills (RAG, LLM, AWS, orchestration, etc.)
-- Longer bullets are acceptable when readable
-- More platform-specific and architecture details are expected
-
-DO NOT generate only 5-7 bullets per experience - that is FULLTIME mode.
-CONTRACT MODE REQUIRES 2-3x MORE BULLETS than Fulltime.
-"""
-        else:  # Fulltime
-            return """
-MANDATORY BULLET COUNTS FOR FULLTIME MODE - YOU MUST FOLLOW THESE EXACTLY:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• summary: EXACTLY 3 to 4 bullets
-• experience_1: EXACTLY 7 bullets
-• experience_2: EXACTLY 5 to 6 bullets
-• experience_3: EXACTLY 5 to 6 bullets
-• experience_4: EXACTLY 3 to 5 bullets (use only when relevant)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-FULLTIME MODE RULES:
-- Keep resume focused, selective, and realistic
-- Prefer realism over maximum keyword density
-- Do not force every JD skill into bullets
-- Summary should feel selective and mature
-"""
-
-    def generate_resume(
+    def generate(
         self,
-        job_description: str,
-        feedback: Optional[str] = None,
-        role_type: str = "AI Engineer",
-        job_type: str = "Fulltime",
-        scorer_feedback: Optional[Dict[str, Any]] = None
-    ) -> dict:
-        scorer_feedback = self._normalize_scorer_feedback(scorer_feedback or {})
-        ownership_areas = scorer_feedback["writer_feedback"].get("core_ownership_areas") or self._identify_ownership_areas(job_description)
+        resume_content: dict,
+        company_name: str = None,
+        job_title: str = None,
+        mode: str = "Fulltime",
+    ) -> tuple:
+        doc = Document()
 
-        examples_block = self._examples_block(scorer_feedback["writer_feedback"])
-        scorer_block = self._scorer_block(scorer_feedback, job_type)
-        bullet_count_instructions = self._get_bullet_count_instructions(job_type)
+        self._setup_document(doc)
+        self._set_default_styles(doc)
 
-        system_prompt = f"""
-You are an expert resume writer.
+        self._add_name(doc, "SRIKANTH MANCHIMCHETTY")
+        self._add_contact_line(doc)
 
-You must write a resume that:
-- scores higher in ATS
-- follows the rulebook exactly
-- aligns to the chosen role type and job type
-- improves based on scorer feedback
-- does not sound fake, inflated, or AI-generated
+        self._add_section_header(doc, "SUMMARY")
+        for bullet in resume_content.get("summary", []):
+            self._add_bullet_point(doc, bullet)
 
-CANDIDATE BACKGROUND
-{self.resume_details}
+        self._add_section_header(doc, "TECHNICAL SKILLS")
+        for category, skills in resume_content.get("skills", {}).items():
+            self._add_skill_line(doc, category, skills)
 
-RULEBOOK
-{self.guidelines}
+        self._add_section_header(doc, "PROFESSIONAL EXPERIENCE")
+        jobs = [
+            {
+                "key": "bee_data",
+                "company": "Bee Data Technologies,",
+                "location": "Atlanta, GA",
+                "dates": "Oct 2025 - Current",
+                "title": "AI Engineer",
+                "description": "Design and implement GenAI solutions using Large Language Models building RAG architectures, developing Python APIs with FastAPI, and deploying models on AWS infrastructure.",
+                "environment": "Python 3.11, FastAPI, LangChain, LangGraph, LlamaIndex, PyTorch, Hugging Face, AWS (SageMaker, EC2, EKS, RDS, S3), Kubeflow, MLflow, Apache Spark, Docker, Kubernetes, PostgreSQL, Pinecone, Git.",
+            },
+            {
+                "key": "allied_health",
+                "company": "Allied Health Agency,",
+                "location": "Dallas, TX",
+                "dates": "Aug 2023 - Oct 2025",
+                "title": "AI/ML Engineer",
+                "description": "Build ML-powered applications and data pipelines for healthcare operations. Develop Python APIs integrating AI models, implement RAG workflows for document search, and deploy services on AWS infrastructure.",
+                "environment": "Python 3.11, FastAPI, LangChain, Scikit-learn, AWS (EC2, RDS, S3, Lambda), PostgreSQL, Pandas, Docker.",
+            },
+            {
+                "key": "byjus",
+                "company": "BYJU'S,",
+                "location": "Bangalore, India",
+                "dates": "Oct 2021 - Aug 2023",
+                "title": "Data Engineer",
+                "description": "Build ML models and analytics platforms for recruitment and business development. Develop predictive algorithms using Python and Scikit-learn, create data pipelines with PySpark, and implement dashboards.",
+                "environment": "Python 3.8, Scikit-learn, XGBoost, PySpark, GCP (BigQuery, Dataproc, Cloud Functions), Power BI, Pandas, NumPy, Git.",
+            },
+            {
+                "key": "cognizant",
+                "company": "Cognizant Technology Solutions,",
+                "location": "Bangalore, India",
+                "dates": "Jun 2019 - Oct 2021",
+                "title": "Program Analyst",
+                "description": "Develop software solutions for Product Lifecycle Management systems and financial data automation for enterprise clients.",
+                "environment": "Python 3.7, Pandas, openpyxl, JavaScript, SQL Server 2016, SSIS, T-SQL, Visual Studio, Git.",
+            },
+        ]
+        for job in jobs:
+            self._add_job_entry(doc, job, resume_content, mode)
 
-CONTEXT
-- Role type: {role_type}
-- Job type: {job_type}
-- Core ownership areas: {json.dumps(ownership_areas)}
-
-{bullet_count_instructions}
-
-ROLE TYPE RULE
-Follow the role-specific emphasis from the rulebook.
-Do not force AI Engineer language if the role type is Data Scientist or Software Engineer.
-
-{examples_block}
-
-{scorer_block}
-
-OUTPUT FORMAT
-Return ONLY valid JSON with these exact keys:
-{{
-  "summary": ["bullet 1", "bullet 2", "..."],
-  "skills": {{
-    "Programming": "Python 3.11+, ..."
-  }},
-  "experience_1": ["bullet 1", "bullet 2", "..."],
-  "experience_2": ["bullet 1", "bullet 2", "..."],
-  "experience_3": ["bullet 1", "bullet 2", "..."],
-  "experience_4": ["bullet 1", "bullet 2", "..."]
-}}
-
-FINAL CHECKLIST BEFORE RESPONDING:
-1. Have I generated the CORRECT NUMBER of bullets for {job_type} mode?
-2. For Contract: Did I generate 15-18 bullets for experience_1? 12-14 for experience_2 9-10 for summary?
-3. For Fulltime: Did I keep it to ~8 bullets for experience_1? 4-6 for summary?
-4. Are bullets grounded with object + action + system + result?
-5. Did I avoid generic phrases like "strong experience" and "proven track record"?
-"""
-
-        user_prompt = f"""
-JOB DESCRIPTION
-{job_description}
-
-"""
-        if feedback:
-            user_prompt += f"""ADDITIONAL FEEDBACK
-{feedback}
-
-"""
-        user_prompt += f"""
-Generate the resume now for {job_type.upper()} MODE.
-Remember: {"Contract mode needs 12-18 bullets for experience_1, 10-14 for experience_2, etc." if job_type.lower() == "contract" else "Fulltime mode needs ~7 bullets for experience_1."}
-Return only valid JSON.
-"""
-
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=12000,  # Increased for Contract mode
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+        self._add_section_header(doc, "EDUCATION")
+        self._add_education_entry(
+            doc,
+            university="University of North Texas",
+            location="Dallas, TX",
+            degree="Masters of Science in Advanced Data Analytics",
+            dates="Aug 2023 - Dec 2024",
+            coursework="Machine Learning, Large Data Visualization, LLM, Cloud Platforms for Data Engineering, Database Systems and SQL Programming",
+        )
+        self._add_education_entry(
+            doc,
+            university="Amrita University",
+            location="Bangalore, India",
+            degree="Bachelor of Technology in Computer Science Engineering",
+            dates="Jun 2015 - May 2019",
+            coursework="Data Structures and Algorithms, Database Management Systems and Software Engineering",
         )
 
-        text = response.content[0].text.strip()
-        return self._parse_resume_json(text)
-
-    def _normalize_scorer_feedback(self, scorer_feedback: Dict[str, Any]) -> Dict[str, Any]:
-        defaults = {
-            "top_fixes": [],
-            "wording_gaps": [],
-            "skill_gaps": [],
-            "writer_feedback": {
-                "core_ownership_areas": [],
-                "skills_to_emphasize": [],
-                "skills_ok_in_skills_only": [],
-                "bad_patterns_to_avoid": [],
-                "rewrite_examples": [],
-                "summary_guidance": "",
-            }
-        }
-        merged = dict(defaults)
-        if isinstance(scorer_feedback, dict):
-            merged.update({k: v for k, v in scorer_feedback.items() if v is not None})
-
-        if not isinstance(merged.get("top_fixes"), list):
-            merged["top_fixes"] = []
-        if not isinstance(merged.get("wording_gaps"), list):
-            merged["wording_gaps"] = []
-        if not isinstance(merged.get("skill_gaps"), list):
-            merged["skill_gaps"] = []
-
-        wf = merged.get("writer_feedback")
-        if not isinstance(wf, dict):
-            wf = {}
-        final_wf = dict(defaults["writer_feedback"])
-        final_wf.update({k: v for k, v in wf.items() if v is not None})
-        for key in ["core_ownership_areas", "skills_to_emphasize", "skills_ok_in_skills_only", "bad_patterns_to_avoid", "rewrite_examples"]:
-            if not isinstance(final_wf.get(key), list):
-                final_wf[key] = []
-        if not isinstance(final_wf.get("summary_guidance"), str):
-            final_wf["summary_guidance"] = ""
-        merged["writer_feedback"] = final_wf
-        return merged
-
-    def _identify_ownership_areas(self, job_description: str) -> List[str]:
-        prompt = f"""Extract 5 to 8 core technical ownership areas from this JD.
-
-These are responsibilities, not tools.
-
-Return only a JSON array.
-
-JOB DESCRIPTION
-{job_description}
-"""
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=500,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text.strip()
-        try:
-            match = re.search(r'\[.*\]', text, re.DOTALL)
-            if match:
-                return json.loads(match.group())
-            return json.loads(text)
-        except Exception:
-            return [line.strip("- ").strip() for line in text.split("\n") if line.strip()][:8]
-
-    def _examples_block(self, writer_feedback: Dict[str, Any]) -> str:
-        dynamic = writer_feedback.get("rewrite_examples", [])
-
-        lines = [
-            "GOOD BULLET EXAMPLES",
-            "1. Built SageMaker training and deployment workflows for batch and real-time inference, then tracked model versions to support controlled releases.",
-            "2. Processed call transcripts and policy documents to generate features used by classification and retrieval models across support workflows.",
-            "3. Implemented monitoring for drift and response quality, then triggered retraining jobs when service thresholds were breached.",
-            "4. Developed a RAG service that retrieved document context from a vector index and injected grounded content into LLM responses.",
-            "5. Packaged inference services in Docker and deployed them behind managed endpoints to support low-latency API requests.",
-            "",
-            "BAD BULLET EXAMPLES",
-            "1. Worked on SageMaker, Docker, Kubernetes, and MLflow for model deployment.",
-            "2. Responsible for AI solutions using Python and AWS.",
-            "3. Strong experience with machine learning and large language models.",
-            "4. Built end-to-end scalable robust solutions for business value.",
-            "5. Used LangChain and OpenAI for RAG.",
-            "",
-            "HOW TO IMPROVE BAD BULLETS",
-            "- name the object or data",
-            "- name the action",
-            "- name the system or platform",
-            "- name the result",
-        ]
-
-        if dynamic:
-            lines.append("")
-            lines.append("SCORER-SPECIFIC REWRITE EXAMPLES")
-            for i, item in enumerate(dynamic, 1):
-                lines.append(f"{i}. BAD: {item.get('bad', '')}")
-                lines.append(f"   BETTER: {item.get('better', '')}")
-
-        return "\n".join(lines)
-
-    def _scorer_block(self, scorer_feedback: Dict[str, Any], job_type: str) -> str:
-        wf = scorer_feedback["writer_feedback"]
-        lines = [
-            "SCORER GUIDANCE TO APPLY",
-            f"- Top fixes: {json.dumps(scorer_feedback.get('top_fixes', []))}",
-            f"- Wording gaps: {json.dumps(scorer_feedback.get('wording_gaps', []))}",
-            f"- Skill gaps: {json.dumps(scorer_feedback.get('skill_gaps', []))}",
-            f"- Core ownership areas: {json.dumps(wf.get('core_ownership_areas', []))}",
-            f"- Skills to emphasize in bullets: {json.dumps(wf.get('skills_to_emphasize', []))}",
-            f"- Skills okay mainly in Skills: {json.dumps(wf.get('skills_ok_in_skills_only', []))}",
-            f"- Bad patterns to avoid: {json.dumps(wf.get('bad_patterns_to_avoid', []))}",
-            f"- Summary guidance: {wf.get('summary_guidance', '')}",
-            "",
-            "ITERATION RULES",
-            "- Do not repeat the same weak patterns from prior iterations.",
-            "- If scorer says bullets are vague, rewrite with more object, workflow, and operational detail.",
-            "- If scorer says bullets are overloaded, split the ideas into separate grounded bullets.",
-            "- If scorer says claims are too inflated, reduce them to supported solution-level language.",
-        ]
-        if job_type.lower() == "contract":
-            lines += [
-                "",
-                "CONTRACT MODE REMINDERS:",
-                "- Generate 14-18 bullets for experience_1 (NOT 5-7!)",
-                "- Generate 14-16 bullets for experience_2",
-                "- Generate 12-16 bullets for experience_3",
-                "- Generate 12-14 bullets for experience_4",
-                "- Generate 9-12 bullets for summary",
-                "- Apply the Resume Expansion Algorithm from the rulebook.",
-                "- Expand coverage, add architecture and operations detail.",
-                "- Allow strategic repetition for vendor ATS.",
-            ]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if company_name and job_title:
+            safe_company = "".join(c for c in company_name if c.isalnum() or c in " _-").strip().replace(" ", "_")
+            safe_title = "".join(c for c in job_title if c.isalnum() or c in " _-").strip().replace(" ", "_")
+            base_name = f"Srikanth_{safe_company}_{safe_title}_{timestamp}"
+        elif company_name:
+            safe_company = "".join(c for c in company_name if c.isalnum() or c in " _-").strip().replace(" ", "_")
+            base_name = f"Srikanth_{safe_company}_{timestamp}"
         else:
-            lines += [
-                "",
-                "FULLTIME MODE REMINDERS:",
-                "- Keep the resume selective, tighter, and more realistic.",
-                "- Do not force every optional or replaceable JD tool into work bullets.",
-                "- Generate ~8 bullets for experience_1, 7-8 for experience_2/3, ~7for experience_4 (if relevant), ~4-6 for summary.",
-            ]
-        return "\n".join(lines)
+            base_name = f"Srikanth_Resume_{timestamp}"
 
-    def _parse_resume_json(self, text: str) -> dict:
-        text = text.strip()
-        if text.startswith("```"):
-            text = re.sub(r'^```json?\s*', '', text)
-            text = re.sub(r'\s*```$', '', text)
+        docx_path = self.output_dir / f"{base_name}.docx"
+        pdf_path = self.output_dir / f"{base_name}.pdf"
+        doc.save(str(docx_path))
+
+        pdf_created = self._convert_to_pdf(docx_path, pdf_path)
+        return docx_path, (pdf_path if pdf_created else None)
+
+    def _setup_document(self, doc: Document):
+        for section in doc.sections:
+            section.top_margin = Inches(0.42)
+            section.bottom_margin = Inches(0.42)
+            section.left_margin = Inches(0.48)
+            section.right_margin = Inches(0.48)
+
+    def _set_default_styles(self, doc: Document):
+        normal = doc.styles["Normal"]
+        normal.font.name = self.body_font
+        normal.font.size = Pt(self.body_size)
         try:
-            parsed = json.loads(text)
-            if isinstance(parsed, dict):
-                return parsed
+            normal._element.rPr.rFonts.set(qn("w:eastAsia"), self.body_font)
         except Exception:
             pass
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
-        raise ValueError("Failed to parse writer response as JSON.")
+
+    def _content_width_inches(self, doc: Document) -> float:
+        section = doc.sections[0]
+        return float((section.page_width - section.left_margin - section.right_margin) / 914400)
+
+    def _right_tab_position(self, doc: Document, inset: float = 0.02):
+        return Inches(self._content_width_inches(doc) - inset)
+
+    def _set_left_grid(self, para, left_inch: float):
+        para.paragraph_format.left_indent = Inches(left_inch)
+        para.paragraph_format.first_line_indent = Inches(0)
+
+    def _add_name(self, doc: Document, name: str):
+        para = doc.add_paragraph()
+        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        para.paragraph_format.space_before = Pt(0)
+        para.paragraph_format.space_after = Pt(2)
+        run = para.add_run(name)
+        run.bold = True
+        run.font.name = self.name_font
+        run.font.size = Pt(16)
+
+    def _add_contact_line(self, doc: Document):
+        para = doc.add_paragraph()
+        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        para.paragraph_format.space_before = Pt(0)
+        para.paragraph_format.space_after = Pt(7)
+
+        left = para.add_run("mvss.1998@gmail.com  -  +1(940)703-0146  -  ")
+        left.font.name = self.body_font
+        left.font.size = Pt(10)
+
+        self._add_hyperlink(para, "https://www.linkedin.com/in/srikanthmanchimchetty", "LinkedIn")
+
+        middle = para.add_run("  -  Dallas, TX, USA  -  ")
+        middle.font.name = self.body_font
+        middle.font.size = Pt(10)
+
+        self._add_hyperlink(para, "https://github.com/Srikanthsanju", "Github")
+
+    def _add_hyperlink(self, paragraph, url, text):
+        part = paragraph.part
+        r_id = part.relate_to(
+            url,
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+            is_external=True,
+        )
+        hyperlink = OxmlElement("w:hyperlink")
+        hyperlink.set(qn("r:id"), r_id)
+
+        new_run = OxmlElement("w:r")
+        r_pr = OxmlElement("w:rPr")
+
+        r_fonts = OxmlElement("w:rFonts")
+        r_fonts.set(qn("w:ascii"), self.body_font)
+        r_fonts.set(qn("w:hAnsi"), self.body_font)
+        r_pr.append(r_fonts)
+
+        sz = OxmlElement("w:sz")
+        sz.set(qn("w:val"), "20")
+        r_pr.append(sz)
+
+        color = OxmlElement("w:color")
+        color.set(qn("w:val"), "0563C1")
+        r_pr.append(color)
+
+        underline = OxmlElement("w:u")
+        underline.set(qn("w:val"), "single")
+        r_pr.append(underline)
+
+        new_run.append(r_pr)
+
+        t = OxmlElement("w:t")
+        t.text = text
+        new_run.append(t)
+
+        hyperlink.append(new_run)
+        paragraph._p.append(hyperlink)
+
+    def _add_section_header(self, doc: Document, title: str):
+        para = doc.add_paragraph()
+        self._set_left_grid(para, self.section_left)
+        para.paragraph_format.space_before = Pt(6)
+        para.paragraph_format.space_after = Pt(2)
+        para.paragraph_format.keep_with_next = True
+        run = para.add_run(title)
+        run.bold = True
+        run.font.name = self.body_font
+        run.font.size = Pt(self.header_size)
+
+        p_pr = para._p.get_or_add_pPr()
+        p_bdr = OxmlElement("w:pBdr")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:sz"), "8")
+        bottom.set(qn("w:space"), "1")
+        bottom.set(qn("w:color"), "000000")
+        p_bdr.append(bottom)
+        p_pr.append(p_bdr)
+
+    def _add_skill_line(self, doc: Document, category: str, skills: str):
+        para = doc.add_paragraph()
+        self._set_left_grid(para, self.content_left)
+        para.paragraph_format.space_before = Pt(0)
+        para.paragraph_format.space_after = Pt(0)
+        para.paragraph_format.line_spacing = 1.0
+
+        cat_run = para.add_run(f"{category}: ")
+        cat_run.bold = True
+        cat_run.font.name = self.body_font
+        cat_run.font.size = Pt(10)
+
+        skills_run = para.add_run(skills)
+        skills_run.font.name = self.body_font
+        skills_run.font.size = Pt(10)
+
+    def _add_bullet_point(self, doc: Document, text: str):
+        para = doc.add_paragraph()
+        pf = para.paragraph_format
+        pf.space_before = Pt(0)
+        pf.space_after = Pt(0)
+        pf.line_spacing = 1.0
+        pf.left_indent = Inches(self.bullet_left)
+        pf.first_line_indent = Inches(0)
+        pf.tab_stops.clear_all()
+        pf.tab_stops.add_tab_stop(Inches(self.bullet_text_left))
+
+        bullet_run = para.add_run("•\t")
+        bullet_run.font.name = self.body_font
+        bullet_run.font.size = Pt(10)
+
+        text_run = para.add_run(text)
+        text_run.font.name = self.body_font
+        text_run.font.size = Pt(10)
+
+    def _add_job_entry(self, doc: Document, job: dict, resume_content: dict, mode: str):
+        para = doc.add_paragraph()
+        self._set_left_grid(para, self.content_left)
+        pf = para.paragraph_format
+        pf.space_before = Pt(6)
+        pf.space_after = Pt(0)
+        pf.keep_with_next = True
+        pf.tab_stops.clear_all()
+        pf.tab_stops.add_tab_stop(self._right_tab_position(doc), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.SPACES)
+
+        company_run = para.add_run(f"{job['company']} ")
+        company_run.bold = True
+        company_run.font.name = self.body_font
+        company_run.font.size = Pt(10)
+
+        loc_run = para.add_run(job["location"])
+        loc_run.font.name = self.body_font
+        loc_run.font.size = Pt(10)
+
+        date_run = para.add_run("\t" + job["dates"])
+        date_run.font.name = self.body_font
+        date_run.font.size = Pt(10)
+
+        title_para = doc.add_paragraph()
+        self._set_left_grid(title_para, self.content_left)
+        title_pf = title_para.paragraph_format
+        title_pf.space_before = Pt(0)
+        title_pf.space_after = Pt(1)
+        title_pf.keep_with_next = True
+
+        title_run = title_para.add_run(job["title"])
+        title_run.bold = True
+        title_run.font.name = self.body_font
+        title_run.font.size = Pt(10)
+
+        if mode == "Contract":
+            desc_para = doc.add_paragraph()
+            self._set_left_grid(desc_para, self.content_left)
+            desc_para.paragraph_format.space_before = Pt(0)
+            desc_para.paragraph_format.space_after = Pt(2)
+            desc_run = desc_para.add_run(job["description"])
+            desc_run.font.name = self.body_font
+            desc_run.font.size = Pt(10)
+
+            resp_para = doc.add_paragraph()
+            self._set_left_grid(resp_para, self.content_left)
+            resp_para.paragraph_format.space_before = Pt(1)
+            resp_para.paragraph_format.space_after = Pt(1)
+            resp_run = resp_para.add_run("Responsibilities:")
+            resp_run.bold = True
+            resp_run.font.name = self.body_font
+            resp_run.font.size = Pt(10)
+
+        # Support both old and new key formats
+        key = job["key"]
+        key_mapping = {
+            "bee_data": "experience_1",
+            "allied_health": "experience_2",
+            "byjus": "experience_3",
+            "cognizant": "experience_4"
+        }
+        # Try old key first, then new key
+        new_key = key_mapping.get(key, key)
+        bullets = resume_content.get(key, []) or resume_content.get(new_key, [])
+        
+        for bullet in bullets:
+            self._add_bullet_point(doc, bullet)
+
+        if mode == "Contract":
+            env_para = doc.add_paragraph()
+            self._set_left_grid(env_para, self.content_left)
+            env_para.paragraph_format.space_before = Pt(3)
+            env_para.paragraph_format.space_after = Pt(2)
+            env_label = env_para.add_run("Environment: ")
+            env_label.bold = True
+            env_label.font.name = self.body_font
+            env_label.font.size = Pt(10)
+            env_text = env_para.add_run(job["environment"])
+            env_text.font.name = self.body_font
+            env_text.font.size = Pt(10)
+
+    def _add_education_entry(self, doc: Document, university: str, location: str, degree: str, dates: str, coursework: str):
+        school_para = doc.add_paragraph()
+        self._set_left_grid(school_para, self.content_left)
+        school_pf = school_para.paragraph_format
+        school_pf.space_before = Pt(5)
+        school_pf.space_after = Pt(0)
+        school_pf.keep_with_next = True
+        school_pf.tab_stops.clear_all()
+        school_pf.tab_stops.add_tab_stop(self._right_tab_position(doc), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.SPACES)
+
+        uni_run = school_para.add_run(f"{university}, ")
+        uni_run.bold = True
+        uni_run.font.name = self.body_font
+        uni_run.font.size = Pt(10)
+
+        loc_run = school_para.add_run(location)
+        loc_run.font.name = self.body_font
+        loc_run.font.size = Pt(10)
+
+        date_run = school_para.add_run("\t" + dates)
+        date_run.font.name = self.body_font
+        date_run.font.size = Pt(10)
+
+        degree_para = doc.add_paragraph()
+        self._set_left_grid(degree_para, self.content_left)
+        degree_para.paragraph_format.space_before = Pt(0)
+        degree_para.paragraph_format.space_after = Pt(0)
+        degree_para.paragraph_format.keep_with_next = True
+        degree_run = degree_para.add_run(degree)
+        degree_run.font.name = self.body_font
+        degree_run.font.size = Pt(10)
+
+        cw_para = doc.add_paragraph()
+        self._set_left_grid(cw_para, self.content_left)
+        cw_para.paragraph_format.space_before = Pt(0)
+        cw_para.paragraph_format.space_after = Pt(2)
+        cw_label = cw_para.add_run("Coursework: ")
+        cw_label.bold = True
+        cw_label.font.name = self.body_font
+        cw_label.font.size = Pt(10)
+        cw_text = cw_para.add_run(coursework)
+        cw_text.font.name = self.body_font
+        cw_text.font.size = Pt(10)
+
+    def _convert_to_pdf(self, docx_path: Path, pdf_path: Path) -> bool:
+        try:
+            from docx2pdf import convert
+            convert(str(docx_path), str(pdf_path))
+            return True
+        except Exception:
+            pass
+
+        for cmd in ("libreoffice", "soffice"):
+            try:
+                subprocess.run(
+                    [cmd, "--headless", "--convert-to", "pdf", "--outdir", str(self.output_dir), str(docx_path)],
+                    check=True,
+                    capture_output=True,
+                )
+                return pdf_path.exists()
+            except Exception:
+                continue
+        return False
+
+
+if __name__ == "__main__":
+    generator = ResumeGenerator(output_dir="./output")
+
+    test_content = {
+        "summary": ["Test summary point 1", "Test summary point 2"],
+        "skills": {"Programming": "Python, SQL"},
+        "experience_1": ["Experience 1 point 1"],
+        "experience_2": ["Experience 2 point 1"],
+        "experience_3": ["Experience 3 point 1"],
+        "experience_4": ["Experience 4 point 1"],
+    }
+
+    docx_path, pdf_path = generator.generate(test_content, "Test", "Role", "Fulltime")
+    print(f"DOCX: {docx_path}")
+    print(f"PDF: {pdf_path}")
