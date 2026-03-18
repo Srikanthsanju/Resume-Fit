@@ -1,11 +1,10 @@
 """
-Rulebook-driven writer agent
+Writer agent with reference-based bullet counts and token logging
 
-- Uses Anthropic for prose generation
-- Reads job_type and role_type from caller
-- Relies on guidelines for point counts and expansion behavior
-- Consumes scorer feedback strongly
-- Enforces explicit bullet counts per job type
+- Uses exact bullet counts from actual reference resumes
+- Logs input/output tokens for cost tracking
+- Fulltime: ~37 bullets total
+- Contract: ~57 bullets total
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import anthropic
 
@@ -40,47 +39,26 @@ class WriterAgent:
         if gp.exists():
             self.guidelines = gp.read_text(encoding="utf-8")
 
-    def _get_bullet_count_instructions(self, job_type: str) -> str:
-        """Return explicit bullet count requirements based on job type."""
+    def _get_bullet_requirements(self, job_type: str) -> dict:
+        """Return exact bullet counts based on reference resumes."""
         if job_type.lower() == "contract":
-            return """
-MANDATORY BULLET COUNTS FOR CONTRACT MODE - YOU MUST FOLLOW THESE EXACTLY:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• summary: EXACTLY 8 to 10 bullets (aim for 10)
-• experience_1: EXACTLY 14 to 18 bullets (aim for 15)
-• experience_2: EXACTLY 12 to 14 bullets (aim for 12)
-• experience_3: EXACTLY 10 to 12 bullets (aim for 10)
-• experience_4: EXACTLY 10 to 11 bullets (aim for 8)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-CONTRACT MODE EXPANSION RULES:
-- This is a vendor-friendly resume requiring HIGH keyword density
-- Generate MORE bullets by splitting complex ideas into multiple grounded bullets
-- Each ownership area should have 2-3 bullets covering different angles
-- Allow strategic repetition of core skills (RAG, LLM, AWS, orchestration, etc.)
-- Longer bullets are acceptable when readable
-- More platform-specific and architecture details are expected
-
-DO NOT generate only 5-7 bullets per experience - that is FULLTIME mode.
-CONTRACT MODE REQUIRES 2-3x MORE BULLETS than Fulltime.
-"""
+            return {
+                "summary": 15,
+                "experience_1": 11,
+                "experience_2": 12,
+                "experience_3": 10,
+                "experience_4": 9,
+                "total": 57
+            }
         else:  # Fulltime
-            return """
-MANDATORY BULLET COUNTS FOR FULLTIME MODE - YOU MUST FOLLOW THESE EXACTLY:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• summary: EXACTLY 4 to 6 bullets
-• experience_1: EXACTLY 9 bullets
-• experience_2: EXACTLY 8 to 10 bullets
-• experience_3: EXACTLY 7 to 10 bullets
-• experience_4: EXACTLY 7 to 10 bullets (use only when relevant)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-FULLTIME MODE RULES:
-- Keep resume focused, selective, and realistic
-- Prefer realism over maximum keyword density
-- Do not force every JD skill into bullets
-- Summary should feel selective and mature
-"""
+            return {
+                "summary": 8,
+                "experience_1": 7,
+                "experience_2": 7,
+                "experience_3": 8,
+                "experience_4": 7,
+                "total": 37
+            }
 
     def generate_resume(
         self,
@@ -89,91 +67,161 @@ FULLTIME MODE RULES:
         role_type: str = "AI Engineer",
         job_type: str = "Fulltime",
         scorer_feedback: Optional[Dict[str, Any]] = None
-    ) -> dict:
+    ) -> Tuple[dict, dict]:
+        """Generate resume and return (content, token_usage)."""
+        
         scorer_feedback = self._normalize_scorer_feedback(scorer_feedback or {})
         ownership_areas = scorer_feedback["writer_feedback"].get("core_ownership_areas") or self._identify_ownership_areas(job_description)
-
-        examples_block = self._examples_block(scorer_feedback["writer_feedback"])
-        scorer_block = self._scorer_block(scorer_feedback, job_type)
-        bullet_count_instructions = self._get_bullet_count_instructions(job_type)
-
-        system_prompt = f"""
-You are an expert resume writer.
-
-You must write a resume that:
-- scores higher in ATS
-- follows the rulebook exactly
-- aligns to the chosen role type and job type
-- improves based on scorer feedback
-- does not sound fake, inflated, or AI-generated
-
-CANDIDATE BACKGROUND
-{self.resume_details}
-
-RULEBOOK
-{self.guidelines}
-
-CONTEXT
-- Role type: {role_type}
-- Job type: {job_type}
-- Core ownership areas: {json.dumps(ownership_areas)}
-
-{bullet_count_instructions}
-
-ROLE TYPE RULE
-Follow the role-specific emphasis from the rulebook.
-Do not force AI Engineer language if the role type is Data Scientist or Software Engineer.
-
-{examples_block}
-
-{scorer_block}
-
-OUTPUT FORMAT
-Return ONLY valid JSON with these exact keys:
-{{
-  "summary": ["bullet 1", "bullet 2", "..."],
-  "skills": {{
-    "Programming": "Python 3.11+, ..."
-  }},
-  "experience_1": ["bullet 1", "bullet 2", "..."],
-  "experience_2": ["bullet 1", "bullet 2", "..."],
-  "experience_3": ["bullet 1", "bullet 2", "..."],
-  "experience_4": ["bullet 1", "bullet 2", "..."]
-}}
-
-FINAL CHECKLIST BEFORE RESPONDING:
-1. Have I generated the CORRECT NUMBER of bullets for {job_type} mode?
-2. For Contract: Did I generate 14-18 bullets for experience_1? 12-14 for experience_2? 10-12 for experience_3? 6-10 for experience_4? 8-10 for summary?
-3. For Fulltime: Did I keep it to ~7 bullets for experience_1?
-4. Are bullets grounded with object + action + system + result?
-5. Did I avoid generic phrases like "strong experience" and "proven track record"?
-"""
-
-        user_prompt = f"""
-JOB DESCRIPTION
-{job_description}
-
-"""
-        if feedback:
-            user_prompt += f"""ADDITIONAL FEEDBACK
-{feedback}
-
-"""
-        user_prompt += f"""
-Generate the resume now for {job_type.upper()} MODE.
-Remember: {"Contract mode needs 14-18 bullets for experience_1, 12-14 for experience_2, etc." if job_type.lower() == "contract" else "Fulltime mode needs ~8 bullets for experience_1."}
-Return only valid JSON.
-"""
+        
+        reqs = self._get_bullet_requirements(job_type)
+        
+        # Build the prompt with exact requirements
+        system_prompt = self._build_system_prompt(job_type, role_type, reqs, ownership_areas, scorer_feedback)
+        user_prompt = self._build_user_prompt(job_description, job_type, reqs, feedback)
 
         response = self.client.messages.create(
             model=self.model,
-            max_tokens=12000,  # Increased for Contract mode
+            max_tokens=8000,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
 
+        # Extract token usage
+        token_usage = {
+            "input": response.usage.input_tokens if hasattr(response, 'usage') else 0,
+            "output": response.usage.output_tokens if hasattr(response, 'usage') else 0
+        }
+        
+        print(f"   📊 Tokens - Input: {token_usage['input']:,}, Output: {token_usage['output']:,}")
+
         text = response.content[0].text.strip()
-        return self._parse_resume_json(text)
+        result = self._parse_resume_json(text)
+        
+        # Validate and log bullet counts
+        self._validate_bullet_counts(result, reqs, job_type)
+        
+        return result, token_usage
+
+    def _build_system_prompt(self, job_type: str, role_type: str, reqs: dict, ownership_areas: list, scorer_feedback: dict) -> str:
+        """Build system prompt with exact bullet count requirements."""
+        
+        bullet_table = f"""
+┌─────────────────────────────────────────────────────────────┐
+│  {job_type.upper()} MODE - EXACT BULLET COUNTS REQUIRED:              │
+├─────────────────────────────────────────────────────────────┤
+│  summary:      EXACTLY {reqs['summary']:2d} bullets                          │
+│  experience_1: EXACTLY {reqs['experience_1']:2d} bullets                          │
+│  experience_2: EXACTLY {reqs['experience_2']:2d} bullets                          │
+│  experience_3: EXACTLY {reqs['experience_3']:2d} bullets                          │
+│  experience_4: EXACTLY {reqs['experience_4']:2d} bullets                          │
+├─────────────────────────────────────────────────────────────┤
+│  TOTAL:        EXACTLY {reqs['total']:2d} bullets                          │
+└─────────────────────────────────────────────────────────────┘
+"""
+
+        format_rules = ""
+        if job_type.lower() == "contract":
+            format_rules = """
+CONTRACT MODE FORMAT:
+- Include Description paragraph before Responsibilities for each experience
+- Include Environment line after bullets listing all technologies
+- Higher keyword density - strategic repetition allowed
+- Longer, more detailed bullets acceptable
+- More technical depth expected
+"""
+        else:
+            format_rules = """
+FULLTIME MODE FORMAT:
+- Include Description paragraph before Responsibilities
+- Include Environment line after bullets
+- More focused and selective
+- Avoid excessive keyword stuffing
+- Quality over quantity
+"""
+
+        scorer_guidance = ""
+        if scorer_feedback.get("top_fixes"):
+            scorer_guidance = f"\nSCORER FEEDBACK TO ADDRESS:\n- " + "\n- ".join(scorer_feedback["top_fixes"][:5])
+
+        return f"""You are an expert resume writer. Generate EXACTLY the number of bullets specified.
+
+{bullet_table}
+
+{format_rules}
+
+CANDIDATE BACKGROUND:
+{self.resume_details}
+
+CONTEXT:
+- Role type: {role_type}
+- Job type: {job_type}
+- Ownership areas: {json.dumps(ownership_areas)}
+{scorer_guidance}
+
+BULLET QUALITY RULES:
+- Each bullet: object/data + action + system/tool + result
+- Avoid: "responsible for", "worked on", "strong experience"
+- Be specific and grounded
+
+OUTPUT FORMAT - Return ONLY valid JSON:
+{{
+  "summary": ["{reqs['summary']} bullets here"],
+  "skills": {{"Programming": "...", "AI Frameworks": "...", ...}},
+  "experience_1": ["{reqs['experience_1']} bullets here"],
+  "experience_2": ["{reqs['experience_2']} bullets here"],
+  "experience_3": ["{reqs['experience_3']} bullets here"],
+  "experience_4": ["{reqs['experience_4']} bullets here"]
+}}
+
+CRITICAL: Count your bullets! You MUST generate exactly {reqs['total']} total bullets."""
+
+    def _build_user_prompt(self, job_description: str, job_type: str, reqs: dict, feedback: Optional[str]) -> str:
+        """Build user prompt."""
+        prompt = f"""JOB DESCRIPTION:
+{job_description}
+
+"""
+        if feedback:
+            prompt += f"""FEEDBACK FROM PREVIOUS ITERATION:
+{feedback}
+
+"""
+        prompt += f"""Generate a {job_type.upper()} resume with EXACTLY these bullet counts:
+- summary: {reqs['summary']} bullets
+- experience_1: {reqs['experience_1']} bullets  
+- experience_2: {reqs['experience_2']} bullets
+- experience_3: {reqs['experience_3']} bullets
+- experience_4: {reqs['experience_4']} bullets
+- TOTAL: {reqs['total']} bullets
+
+Return ONLY valid JSON. Count your bullets before responding."""
+        
+        return prompt
+
+    def _validate_bullet_counts(self, result: dict, reqs: dict, job_type: str):
+        """Validate and log actual vs required bullet counts."""
+        actual = {
+            "summary": len(result.get("summary", [])),
+            "experience_1": len(result.get("experience_1", [])),
+            "experience_2": len(result.get("experience_2", [])),
+            "experience_3": len(result.get("experience_3", [])),
+            "experience_4": len(result.get("experience_4", [])),
+        }
+        actual["total"] = sum(actual.values())
+        
+        print(f"\n   📋 Bullet Count Validation ({job_type}):")
+        all_match = True
+        for key in ["summary", "experience_1", "experience_2", "experience_3", "experience_4"]:
+            match = "✓" if actual[key] == reqs[key] else "✗"
+            if actual[key] != reqs[key]:
+                all_match = False
+            print(f"      {key}: {actual[key]}/{reqs[key]} {match}")
+        
+        total_match = "✓" if actual["total"] == reqs["total"] else "✗"
+        print(f"      TOTAL: {actual['total']}/{reqs['total']} {total_match}")
+        
+        if not all_match:
+            print(f"      ⚠️ Bullet counts don't match requirements!")
 
     def _normalize_scorer_feedback(self, scorer_feedback: Dict[str, Any]) -> Dict[str, Any]:
         defaults = {
@@ -193,36 +241,25 @@ Return only valid JSON.
         if isinstance(scorer_feedback, dict):
             merged.update({k: v for k, v in scorer_feedback.items() if v is not None})
 
-        if not isinstance(merged.get("top_fixes"), list):
-            merged["top_fixes"] = []
-        if not isinstance(merged.get("wording_gaps"), list):
-            merged["wording_gaps"] = []
-        if not isinstance(merged.get("skill_gaps"), list):
-            merged["skill_gaps"] = []
+        for key in ["top_fixes", "wording_gaps", "skill_gaps"]:
+            if not isinstance(merged.get(key), list):
+                merged[key] = []
 
         wf = merged.get("writer_feedback")
         if not isinstance(wf, dict):
             wf = {}
         final_wf = dict(defaults["writer_feedback"])
         final_wf.update({k: v for k, v in wf.items() if v is not None})
-        for key in ["core_ownership_areas", "skills_to_emphasize", "skills_ok_in_skills_only", "bad_patterns_to_avoid", "rewrite_examples"]:
-            if not isinstance(final_wf.get(key), list):
-                final_wf[key] = []
-        if not isinstance(final_wf.get("summary_guidance"), str):
-            final_wf["summary_guidance"] = ""
         merged["writer_feedback"] = final_wf
         return merged
 
     def _identify_ownership_areas(self, job_description: str) -> List[str]:
-        prompt = f"""Extract 5 to 8 core technical ownership areas from this JD.
+        prompt = f"""Extract 5-8 core technical ownership areas from this JD.
+Return only a JSON array of strings.
 
-These are responsibilities, not tools.
+JOB DESCRIPTION:
+{job_description}"""
 
-Return only a JSON array.
-
-JOB DESCRIPTION
-{job_description}
-"""
         response = self.client.messages.create(
             model=self.model,
             max_tokens=500,
@@ -236,82 +273,6 @@ JOB DESCRIPTION
             return json.loads(text)
         except Exception:
             return [line.strip("- ").strip() for line in text.split("\n") if line.strip()][:8]
-
-    def _examples_block(self, writer_feedback: Dict[str, Any]) -> str:
-        dynamic = writer_feedback.get("rewrite_examples", [])
-
-        lines = [
-            "GOOD BULLET EXAMPLES",
-            "1. Built SageMaker training and deployment workflows for batch and real-time inference, then tracked model versions to support controlled releases.",
-            "2. Processed call transcripts and policy documents to generate features used by classification and retrieval models across support workflows.",
-            "3. Implemented monitoring for drift and response quality, then triggered retraining jobs when service thresholds were breached.",
-            "4. Developed a RAG service that retrieved document context from a vector index and injected grounded content into LLM responses.",
-            "5. Packaged inference services in Docker and deployed them behind managed endpoints to support low-latency API requests.",
-            "",
-            "BAD BULLET EXAMPLES",
-            "1. Worked on SageMaker, Docker, Kubernetes, and MLflow for model deployment.",
-            "2. Responsible for AI solutions using Python and AWS.",
-            "3. Strong experience with machine learning and large language models.",
-            "4. Built end-to-end scalable robust solutions for business value.",
-            "5. Used LangChain and OpenAI for RAG.",
-            "",
-            "HOW TO IMPROVE BAD BULLETS",
-            "- name the object or data",
-            "- name the action",
-            "- name the system or platform",
-            "- name the result",
-        ]
-
-        if dynamic:
-            lines.append("")
-            lines.append("SCORER-SPECIFIC REWRITE EXAMPLES")
-            for i, item in enumerate(dynamic, 1):
-                lines.append(f"{i}. BAD: {item.get('bad', '')}")
-                lines.append(f"   BETTER: {item.get('better', '')}")
-
-        return "\n".join(lines)
-
-    def _scorer_block(self, scorer_feedback: Dict[str, Any], job_type: str) -> str:
-        wf = scorer_feedback["writer_feedback"]
-        lines = [
-            "SCORER GUIDANCE TO APPLY",
-            f"- Top fixes: {json.dumps(scorer_feedback.get('top_fixes', []))}",
-            f"- Wording gaps: {json.dumps(scorer_feedback.get('wording_gaps', []))}",
-            f"- Skill gaps: {json.dumps(scorer_feedback.get('skill_gaps', []))}",
-            f"- Core ownership areas: {json.dumps(wf.get('core_ownership_areas', []))}",
-            f"- Skills to emphasize in bullets: {json.dumps(wf.get('skills_to_emphasize', []))}",
-            f"- Skills okay mainly in Skills: {json.dumps(wf.get('skills_ok_in_skills_only', []))}",
-            f"- Bad patterns to avoid: {json.dumps(wf.get('bad_patterns_to_avoid', []))}",
-            f"- Summary guidance: {wf.get('summary_guidance', '')}",
-            "",
-            "ITERATION RULES",
-            "- Do not repeat the same weak patterns from prior iterations.",
-            "- If scorer says bullets are vague, rewrite with more object, workflow, and operational detail.",
-            "- If scorer says bullets are overloaded, split the ideas into separate grounded bullets.",
-            "- If scorer says claims are too inflated, reduce them to supported solution-level language.",
-        ]
-        if job_type.lower() == "contract":
-            lines += [
-                "",
-                "CONTRACT MODE REMINDERS:",
-                "- Generate 14-18 bullets for experience_1 (NOT 5-7!)",
-                "- Generate 12-14 bullets for experience_2",
-                "- Generate 11-12 bullets for experience_3",
-                "- Generate 10-11 bullets for experience_4",
-                "- Generate 9-11 bullets for summary",
-                "- Apply the Resume Expansion Algorithm from the rulebook.",
-                "- Expand coverage, add architecture and operations detail.",
-                "- Allow strategic repetition for vendor ATS.",
-            ]
-        else:
-            lines += [
-                "",
-                "FULLTIME MODE REMINDERS:",
-                "- Keep the resume selective, tighter, and more realistic.",
-                "- Do not force every optional or replaceable JD tool into work bullets.",
-                "- Generate ~7 bullets for experience_1, 5-6 bullets for experience_2/3, 4-6 bullets for summary, 5-6 bullets for experience_4",
-            ]
-        return "\n".join(lines)
 
     def _parse_resume_json(self, text: str) -> dict:
         text = text.strip()
