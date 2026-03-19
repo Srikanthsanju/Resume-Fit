@@ -116,8 +116,11 @@ class DocxGenerator:
         
         # Process each tag
         for tag, content_lines in final_data.items():
-            tag_placeholder = f"[[{tag}]]"
-            tag_lower = tag.lower()
+            # --- THE FIX: Strip brackets in case the AI included them in the JSON key ---
+            clean_tag = tag.replace("[", "").replace("]", "")
+            tag_placeholder = f"[[{clean_tag}]]"
+            tag_lower = clean_tag.lower()
+            # ----------------------------------------------------------------------------
             
             # Find the paragraph containing this tag
             for i, para in enumerate(doc.paragraphs):
