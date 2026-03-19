@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 from .agents.orchestrator import ResumeOrchestrator
 from .config import settings
+from .routers import preview, health
 
 app = FastAPI(title="Resume-Fit API")
 
@@ -15,6 +16,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(preview.router, prefix="/api", tags=["preview"])
+app.include_router(health.router, prefix="/api", tags=["health"])
 
 settings.OUTPUT_DIR.mkdir(exist_ok=True)
 app.mount("/files", StaticFiles(directory=str(settings.OUTPUT_DIR)), name="files")
