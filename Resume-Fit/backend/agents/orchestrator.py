@@ -15,8 +15,8 @@ class ResumeOrchestrator:
         """
         Returns target bullet count based on tag type and job mode.
         Counts derived from reference resumes:
-        - Fulltime (Srikanth_DA): Summary=8, Exp_1=12, Exp_2=10, Exp_3=9, Exp_4=7
-        - Contract (Srikanth_BD): Summary=15, Exp_1=16, Exp_2=14, Exp_3=11, Exp_4=10
+        - Fulltime (Srikanth_DA): Summary=5, Exp_1=11, Exp_2=10, Exp_3=9, Exp_4=7
+        - Contract (Srikanth_BD): Summary=13, Exp_1=14, Exp_2=14, Exp_3=10, Exp_4=9
         """
         tag_lower = tag.lower()
         
@@ -26,15 +26,15 @@ class ResumeOrchestrator:
             
         counts = {
             "contract": {
-                "summary": 15, 
-                "exp_1": 16, 
+                "summary": 13, 
+                "exp_1": 14, 
                 "exp_2": 14, 
-                "exp_3": 11, 
-                "exp_4": 10
+                "exp_3": 10, 
+                "exp_4": 9
             },
             "fulltime": {
-                "summary": 8, 
-                "exp_1": 12, 
+                "summary": 5, 
+                "exp_1": 11, 
                 "exp_2": 10, 
                 "exp_3": 9, 
                 "exp_4": 7
