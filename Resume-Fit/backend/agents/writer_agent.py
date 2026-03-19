@@ -1,6 +1,7 @@
 import anthropic
 import os
 import json
+import re
 from pathlib import Path
 from ..config import settings
 
@@ -14,26 +15,37 @@ class WriterAgent:
         self.details = details_path.read_text(encoding="utf-8") if details_path.exists() else ""
         self.rules = rules_path.read_text(encoding="utf-8") if rules_path.exists() else ""
 
+    def _parse_json(self, text):
+        """Robustly extracts JSON even if Claude wraps it in markdown blocks."""
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except Exception as e:
+                print(f"❌ JSON parsing failed inside regex: {e}")
+        else:
+            print("❌ Failed to find any JSON brackets in response.")
+        return {}
+
     def generate_full_resume(self, tags, format_map, jd, job_type):
-        # Build strict formatting rules for every single tag based on the Orchestrator's math
         format_instructions = ""
         for tag, count in format_map.items():
             if count == 0:
                 if "description" in tag.lower():
-                    format_instructions += f"- [[{tag}]]: 2-3 sentences. MAX 70 words total. NO BULLETS.\n"
+                    format_instructions += f"- \"{tag}\": 2-3 sentences. MAX 70 words total. NO BULLETS.\n"
                 elif "env" in tag.lower():
-                    format_instructions += f"- [[{tag}]]: Single comma-separated list starting with 'Environment: '.\n"
+                    format_instructions += f"- \"{tag}\": Single comma-separated list starting with 'Environment: '.\n"
                 elif "skills" in tag.lower():
-                    format_instructions += f"- [[{tag}]]: Key-Value format (e.g., 'Programming: Python'). One per line.\n"
+                    format_instructions += f"- \"{tag}\": Key-Value format (e.g., 'Programming: Python'). One per line.\n"
             else:
-                format_instructions += f"- [[{tag}]]: EXACTLY {count} bullet points. 1-2 lines each. MUST start with an action verb.\n"
+                format_instructions += f"- \"{tag}\": EXACTLY {count} bullet points. 1-2 lines each. MUST start with an action verb.\n"
 
         system_prompt = f"""
         You are an elite-level Technical Resume Writer. 
         CRITICAL RULES:
         {self.rules}
         
-        OUTPUT FORMAT: You MUST output ONLY valid JSON. The keys must match the exact tags requested. 
+        OUTPUT FORMAT: You MUST output ONLY valid JSON. The keys must match the exact tags requested (without brackets). 
         For bullets, output a list of strings. For descriptions/environments, output a list containing a single string.
         """
 
@@ -48,15 +60,16 @@ class WriterAgent:
         {format_instructions}
         """
         
-        response = self.client.messages.create(
-            model=self.model, max_tokens=4000, temperature=0.3,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}]
-        )
         try:
-            return json.loads(response.content[0].text.strip())
-        except json.JSONDecodeError:
-            print("JSON parsing failed, returning raw text.")
+            response = self.client.messages.create(
+                model=self.model, max_tokens=4000, temperature=0.3,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}]
+            )
+            raw_text = response.content[0].text.strip()
+            return self._parse_json(raw_text)
+        except Exception as e:
+            print(f"❌ Generation API Error: {e}")
             return {}
 
     def refine_full_resume(self, draft_resume, feedback, jd, job_type):
@@ -65,12 +78,14 @@ class WriterAgent:
         The ATS Scorer found issues. Apply these EXACT fixes:\n{feedback}\n
         Return the ENTIRE updated JSON object using the exact same keys.
         """
-        response = self.client.messages.create(
-            model=self.model, max_tokens=4000, temperature=0.3,
-            system=f"You are an elite-level Technical Resume Writer. Output ONLY valid JSON.\n{self.rules}",
-            messages=[{"role": "user", "content": user_prompt}]
-        )
         try:
-            return json.loads(response.content[0].text.strip())
-        except:
+            response = self.client.messages.create(
+                model=self.model, max_tokens=4000, temperature=0.3,
+                system=f"You are an elite-level Technical Resume Writer. Output ONLY valid JSON.\n{self.rules}",
+                messages=[{"role": "user", "content": user_prompt}]
+            )
+            raw_text = response.content[0].text.strip()
+            return self._parse_json(raw_text)
+        except Exception as e:
+            print(f"❌ Refinement API Error: {e}")
             return draft_resume

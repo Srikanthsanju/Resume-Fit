@@ -6,7 +6,6 @@ from docx.shared import Pt, Inches
 import shutil
 import copy
 
-
 class DocxGenerator:
     """
     Fills DOCX templates by replacing [[tags]] with generated content.
@@ -116,6 +115,7 @@ class DocxGenerator:
         
         # Process each tag
         for tag, content_lines in final_data.items():
+            
             # --- THE FIX: Strip brackets in case the AI included them in the JSON key ---
             clean_tag = tag.replace("[", "").replace("]", "")
             tag_placeholder = f"[[{clean_tag}]]"
@@ -130,7 +130,6 @@ class DocxGenerator:
                     index = list(parent).index(para._p)
                     
                     # Delete the original tag paragraph entirely
-                    # (the tag paragraph itself is just a placeholder)
                     parent.remove(para._p)
                     
                     # Insert new paragraphs at the same position
@@ -143,22 +142,18 @@ class DocxGenerator:
                         
                         # Determine the type of content based on tag name
                         if "description" in tag_lower:
-                            # Description: normal paragraph, no bullet
                             new_para = self._create_normal_paragraph(doc, line)
                             paragraphs_to_insert.append(new_para._p)
                             
                         elif "env" in tag_lower:
-                            # Environment: bold prefix + normal tech stack
                             new_para = self._create_env_paragraph(doc, line)
                             paragraphs_to_insert.append(new_para._p)
                             
                         elif "skills" in tag_lower:
-                            # Skills: bold category + normal values
                             new_para = self._create_skills_paragraph(doc, line)
                             paragraphs_to_insert.append(new_para._p)
                             
                         else:
-                            # Experience bullets, Summary bullets, etc.
                             new_para = self._create_bullet_paragraph(doc, line)
                             paragraphs_to_insert.append(new_para._p)
                     
