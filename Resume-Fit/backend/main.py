@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
-from agents.orchestrator import ResumeOrchestrator
-from config import settings
+from .agents.orchestrator import ResumeOrchestrator
+from .config import settings
 
 app = FastAPI(title="Resume-Fit API")
 
@@ -21,7 +21,6 @@ app.mount("/files", StaticFiles(directory=str(settings.OUTPUT_DIR)), name="files
 
 orchestrator = ResumeOrchestrator()
 
-# FIXED: Matches the React frontend payload exactly
 class ResumeRequest(BaseModel):
     job_description: str
     job_type: str 
@@ -48,7 +47,6 @@ async def generate_resume(req: ResumeRequest):
             company_name=req.company_name,
             job_title=req.job_title
         )
-        # FIXED: Returning the result directly so React can read result.docx_url
         return result 
     except Exception as e:
         print(f"❌ ERROR: {str(e)}")
