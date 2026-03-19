@@ -12,7 +12,6 @@ class ResumeOrchestrator:
         self.generator = DocxGenerator()
 
     def _get_target_count(self, tag, job_type):
-        """Hardcoded targets based on your Gold Standard files."""
         tag_lower = tag.lower()
         if "description" in tag_lower or "env" in tag_lower or "skills" in tag_lower:
             return 0
@@ -33,21 +32,59 @@ class ResumeOrchestrator:
         tags = self.parser.get_tags(template_path)
         final_data = {}
         
+        # UI Tracking Variables
+        total_iterations = 0
+        avg_score = 0
+        score_count = 0
+        all_passed = True
+        top_fixes = []
+
+        print(f"🚀 Starting Atomic Generation using template: {template_path.name}")
+        
         for tag in tags:
             target_count = self._get_target_count(tag, job_type)
-            print(f"Generating [[{tag}]]...")
+            print(f"\n⚡ Processing Tag: [[{tag}]] | Target Bullets: {target_count} | Mode: {job_type}")
             
+            # Generate
             content = self.writer.generate_section(tag, target_count, jd, job_type)
+            total_iterations += 1
+            
+            # Score
             result = self.scorer.score_section(tag, content, target_count, jd, job_type)
             
-            if not result['passed']:
-                print(f"Refining [[{tag}]] (Score: {result['score']})...")
-                content = self.writer.generate_section(tag, target_count, jd, job_type, result['feedback'])
-                
+            # Refine
+            if not result.get('passed', True) and result.get('score', 100) != 100:
+                print(f"⚠️ [[{tag}]] failed initial scoring (Score: {result.get('score')}). Refining...")
+                content = self.writer.generate_section(tag, target_count, jd, job_type, result.get('feedback'))
+                total_iterations += 1
+                all_passed = False
+                if result.get('feedback'):
+                    top_fixes.append(f"[{tag}] {result['feedback']}")
+                    
+            score_count += 1
+            avg_score += result.get('score', 100)
             final_data[tag] = content
+            print(f"✅ Finished [[{tag}]]. Generated {len(content)} items.")
             
+        final_score = int(avg_score / score_count) if score_count > 0 else 100
         output_filename = f"Srikanth_{company_name.replace(' ', '_')}_{job_type}.docx"
         output_path = settings.OUTPUT_DIR / output_filename
         
         self.generator.fill_template(template_path, output_path, final_data)
-        return {"download_url": f"/files/{output_filename}"}
+        
+        print(f"\n🎉 Generation Complete! Final Score: {final_score}")
+        
+        # FIXED: Matches exactly what Generate.jsx is looking for
+        return {
+            "passed": all_passed,
+            "final_score": final_score,
+            "iterations": total_iterations,
+            "docx_url": f"/files/{output_filename}",
+            "pdf_url": None, # Add PDF logic later if needed
+            "resume_content": final_data,
+            "score_details": {
+                "ats_confidence": "High" if final_score > 85 else "Medium",
+                "recruiter_confidence": "High" if final_score > 85 else "Medium",
+                "top_fixes": top_fixes
+            }
+        }
