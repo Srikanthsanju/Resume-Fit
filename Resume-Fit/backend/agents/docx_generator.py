@@ -2,7 +2,7 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
-from docx.shared import Pt
+from docx.shared import Pt, Inches
 import shutil
 import copy
 
@@ -19,6 +19,12 @@ class DocxGenerator:
         Uses Word's built-in bullet list by setting numPr properties.
         """
         para = doc.add_paragraph()
+        
+        # --- FORCED ALIGNMENT FIX ---
+        # Forces the bullet to align left and creates a hanging indent for the text
+        para.paragraph_format.left_indent = Inches(0.25)
+        para.paragraph_format.first_line_indent = Inches(-0.25)
+        # ----------------------------
         
         # Create numbering properties for bullet
         pPr = para._p.get_or_add_pPr()

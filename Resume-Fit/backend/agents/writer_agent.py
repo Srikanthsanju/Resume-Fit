@@ -1,6 +1,6 @@
 import anthropic
-from openai import OpenAI
 import os
+import json
 from pathlib import Path
 from ..config import settings
 
@@ -14,51 +14,63 @@ class WriterAgent:
         self.details = details_path.read_text(encoding="utf-8") if details_path.exists() else ""
         self.rules = rules_path.read_text(encoding="utf-8") if rules_path.exists() else ""
 
-    def _get_format_instructions(self, tag, target_count):
-        """Changes the AI instructions based on the specific tag."""
-        tag_lower = tag.lower()
-        if "description" in tag_lower:
-            return "FORMAT: Write a dense 3-4 sentence paragraph summarizing the role scope. NO BULLETS. DO NOT use line breaks."
-        elif "env" in tag_lower:
-            return "FORMAT: Write a single comma-separated list of technologies starting with 'Environment: '"
-        elif "skills" in tag_lower:
-            return "FORMAT: Write in Key-Value format (e.g., 'Programming: Python, SQL'). One category per line. NO BULLETS."
-        else:
-            return f"FORMAT: Write EXACTLY {target_count} bullet points. Each bullet should be 2-3 lines long. Return ONLY a list starting with dashes (-)."
+    def generate_full_resume(self, tags, format_map, jd, job_type):
+        # Build strict formatting rules for every single tag based on the Orchestrator's math
+        format_instructions = ""
+        for tag, count in format_map.items():
+            if count == 0:
+                if "description" in tag.lower():
+                    format_instructions += f"- [[{tag}]]: 2-3 sentences. MAX 70 words total. NO BULLETS.\n"
+                elif "env" in tag.lower():
+                    format_instructions += f"- [[{tag}]]: Single comma-separated list starting with 'Environment: '.\n"
+                elif "skills" in tag.lower():
+                    format_instructions += f"- [[{tag}]]: Key-Value format (e.g., 'Programming: Python'). One per line.\n"
+            else:
+                format_instructions += f"- [[{tag}]]: EXACTLY {count} bullet points. 1-2 lines each. MUST start with an action verb.\n"
 
-    def generate_section(self, tag, target_count, jd, job_type, feedback=None):
-        format_rules = self._get_format_instructions(tag, target_count)
-        
         system_prompt = f"""
-        You are an expert AI Resume Writer.
+        You are an elite-level Technical Resume Writer. 
+        CRITICAL RULES:
         {self.rules}
         
-        TASK: Write ONLY the content for the [[{tag}]] section of a {job_type} resume.
-        CRITICAL FORMAT CONSTRAINT: {format_rules}
+        OUTPUT FORMAT: You MUST output ONLY valid JSON. The keys must match the exact tags requested. 
+        For bullets, output a list of strings. For descriptions/environments, output a list containing a single string.
         """
-        
-        user_prompt = f"""
-        JOB DESCRIPTION:\n{jd}\n\n
-        MY DEEP EXPERIENCE:\n{self.details}\n\n
-        BRIDGE LOGIC: Use my experience to fulfill the format constraints. If a skill is in the JD but not my history, assume I used it to deploy or architect the systems in my existing projects.
-        """
-        
-        if feedback:
-            user_prompt += f"\n\nFIX THIS FEEDBACK: {feedback}"
 
+        user_prompt = f"""
+        JOB TYPE: {job_type}
+        JOB DESCRIPTION:\n{jd}\n
+        MY EXPERIENCE:\n{self.details}\n
+        
+        DRAFT THE ENTIRE RESUME. Do not stuff keywords into pre-2022 jobs. Ensure a cohesive narrative across all jobs without sounding repetitive.
+        
+        CRITICAL FORMATTING BLUEPRINT (DO NOT DEVIATE):
+        {format_instructions}
+        """
+        
         response = self.client.messages.create(
-            model=self.model,
-            max_tokens=1500,
+            model=self.model, max_tokens=4000, temperature=0.3,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}]
         )
-        
-        text = response.content[0].text.strip()
-        
-        # If it's a bulleted section, parse it into a list. Otherwise, return the raw text.
-        if "description" in tag.lower() or "env" in tag.lower():
-            return [text] # Return as single-item list for consistency
-        elif "skills" in tag.lower():
-            return [line.strip() for line in text.split('\n') if line.strip()]
-        else:
-            return [line.strip("- •").strip() for line in text.split('\n') if line.strip()]
+        try:
+            return json.loads(response.content[0].text.strip())
+        except json.JSONDecodeError:
+            print("JSON parsing failed, returning raw text.")
+            return {}
+
+    def refine_full_resume(self, draft_resume, feedback, jd, job_type):
+        user_prompt = f"""
+        Here is the current draft of the resume:\n{json.dumps(draft_resume)}\n
+        The ATS Scorer found issues. Apply these EXACT fixes:\n{feedback}\n
+        Return the ENTIRE updated JSON object using the exact same keys.
+        """
+        response = self.client.messages.create(
+            model=self.model, max_tokens=4000, temperature=0.3,
+            system=f"You are an elite-level Technical Resume Writer. Output ONLY valid JSON.\n{self.rules}",
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        try:
+            return json.loads(response.content[0].text.strip())
+        except:
+            return draft_resume
