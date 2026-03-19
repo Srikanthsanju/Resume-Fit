@@ -12,20 +12,40 @@ class ResumeOrchestrator:
         self.generator = DocxGenerator()
 
     def _get_target_count(self, tag, job_type):
+        """
+        Returns target bullet count based on tag type and job mode.
+        Counts derived from reference resumes:
+        - Fulltime (Srikanth_DA): Summary=8, Exp_1=12, Exp_2=10, Exp_3=9, Exp_4=7
+        - Contract (Srikanth_BD): Summary=15, Exp_1=16, Exp_2=14, Exp_3=11, Exp_4=10
+        """
         tag_lower = tag.lower()
+        
+        # Non-bullet sections return 0
         if "description" in tag_lower or "env" in tag_lower or "skills" in tag_lower:
             return 0
             
         counts = {
-            "contract": {"summary": 15, "exp_1": 11, "exp_2": 12, "exp_3": 10, "exp_4": 9},
-            "fulltime": {"summary": 8, "exp_1": 7, "exp_2": 7, "exp_3": 8, "exp_4": 7}
+            "contract": {
+                "summary": 15, 
+                "exp_1": 16, 
+                "exp_2": 14, 
+                "exp_3": 11, 
+                "exp_4": 10
+            },
+            "fulltime": {
+                "summary": 8, 
+                "exp_1": 12, 
+                "exp_2": 10, 
+                "exp_3": 9, 
+                "exp_4": 7
+            }
         }
         
         mode = job_type.lower()
         for key, count in counts.get(mode, {}).items():
             if key in tag_lower:
                 return count
-        return 5 # Fallback default
+        return 5  # Fallback default
 
     def process_job(self, jd: str, job_type: str, company_name: str, job_title: str):
         template_path = settings.CONTRACT_TEMPLATE if job_type == "Contract" else settings.FULLTIME_TEMPLATE
