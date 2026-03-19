@@ -16,7 +16,7 @@ class Config:
     CONFIG_DIR = BASE_DIR / "config"
     
     # Mode Settings
-    CONTRACT_TEMPLATE = TEMPLATE_DIR / "Srikanth_Contract_Tags.docx"
+    CONTRACT_TEMPLATE = TEMPLATE_DIR / "Contract_Template.docx"
     FULLTIME_TEMPLATE = TEMPLATE_DIR / "Srikanth_Fulltime_Tags.docx"
 
     # Scoring Constraints
